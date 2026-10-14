@@ -1,0 +1,12 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "players": {
+      ".indexOn": ["name"]
+    },
+    "posts": {
+      ".indexOn": ["timestamp"]
+    }
+  }
+}
