@@ -859,6 +859,10 @@ footer{
 #chat-msgs .cm .cm-body{flex:1;min-width:0;}
 #chat-msgs .cm .cm-name{font-size:10px;font-weight:700;opacity:.7;margin-bottom:3px;display:flex;align-items:center;gap:6px;}
 #chat-msgs .cm .cm-tag{font-size:8px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:1px 5px;border:1px solid currentColor;opacity:.8;}
+.role-badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px 4px;margin-left:6px;vertical-align:middle;white-space:nowrap;color:#fff;text-shadow:1px 1px 0 rgba(0,0,0,.5);clip-path:polygon(4px 0,calc(100% - 4px) 0,calc(100% - 4px) 4px,100% 4px,100% calc(100% - 4px),calc(100% - 4px) calc(100% - 4px),calc(100% - 4px) 100%,4px 100%,4px calc(100% - 4px),0 calc(100% - 4px),0 4px,4px 4px);box-shadow:inset 0 2px 0 rgba(255,255,255,.35),inset 0 -3px 0 rgba(0,0,0,.35),inset 2px 0 0 rgba(255,255,255,.12),inset -2px 0 0 rgba(0,0,0,.18);filter:drop-shadow(2px 2px 0 rgba(0,0,0,.45));}
+.role-badge::before{content:'';display:inline-block;width:6px;height:6px;margin-right:6px;background:currentColor;box-shadow:1px 1px 0 rgba(0,0,0,.4);}
+.dev-card .role-badge{margin-left:0;font-size:10px;padding:4px 12px 5px;}
+#chat-msgs .cm .role-badge{font-size:8px;}
 #chat-msgs .cm.cm-mine .cm-name{color:#fff;}
 #chat-msgs .cm .cm-time{font-size:9px;opacity:.4;text-align:right;margin-top:4px;}
 #chat-input-area{display:flex;gap:0;border-top:2px solid var(--ink);}
@@ -2173,6 +2177,50 @@ footer{
     renderPreviews(Object.values(data));
   });
 
+  // ---- Staff role badges (unique color per role; owner can override colors via role_badges node) ----
+  const ROLE_BADGE_DEFAULTS = {
+    'Owner': '#ef4444', 'Admin': '#3b82f6', 'Manager': '#a855f7', 'Moderator': '#22c55e',
+    'Developer': '#f59e0b', 'Support': '#06b6d4', 'Staff': '#8C8680', 'Helper': '#84cc16', 'Trial Staff': '#71717a'
+  };
+  let _roleBadgeCustom = {};
+  let _staffRoleByName = {};
+  function badgeFgFor(bg) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(bg || '').trim());
+    if (!m) return '#ffffff';
+    const r = parseInt(m[1].slice(0, 2), 16), g = parseInt(m[1].slice(2, 4), 16), b = parseInt(m[1].slice(4, 6), 16);
+    return ((r * 299 + g * 587 + b * 114) / 1000) > 150 ? '#121113' : '#ffffff';
+  }
+  function badgeBgFor(role) {
+    const r = String(role || '').trim();
+    if (!r) return null;
+    if (_roleBadgeCustom[r] && _roleBadgeCustom[r].bg) return _roleBadgeCustom[r].bg;
+    if (ROLE_BADGE_DEFAULTS[r]) return ROLE_BADGE_DEFAULTS[r];
+    let h = 0;
+    for (let i = 0; i < r.length; i++) h = (Math.imul(h, 31) + r.charCodeAt(i)) >>> 0;
+    return 'hsl(' + (h % 360) + ',65%,42%)';
+  }
+  function roleBadgeHtml(role) {
+    const r = String(role || '').trim();
+    if (!r) return '';
+    const bg = badgeBgFor(r);
+    const fg = /^hsl/.test(bg) ? '#ffffff' : badgeFgFor(bg);
+    return `<span class="role-badge" style="background:${bg};color:${fg};">${r.replace(/</g, '&lt;')}</span>`;
+  }
+  function staffRoleFor(name) {
+    const n = String(name || '').trim().toLowerCase();
+    return (n && _staffRoleByName[n]) || '';
+  }
+  db.ref('staff').on('value', snapshot => {
+    const data = snapshot.val() || {};
+    _staffRoleByName = {};
+    Object.values(data).forEach(s => {
+      if (s && s.username) _staffRoleByName[String(s.username).toLowerCase()] = s.role || 'Staff';
+    });
+  });
+  db.ref('role_badges').on('value', snapshot => {
+    _roleBadgeCustom = snapshot.val() || {};
+  });
+
   // ---- Team ----
   function renderTeam(members) {
     const grid = document.getElementById('dev-grid');
@@ -2190,7 +2238,7 @@ footer{
         : initial;
       return `
         <div class="dev-card">
-          <span class="dev-role">${m.role || 'Member'}</span>
+          <div style="margin-bottom:18px;">${roleBadgeHtml(m.role || 'Member')}</div>
           <div class="dev-avatar">${avatarHtml}</div>
           <div class="dev-name">${m.name}</div>
           <div class="dev-tagline mono">${(m.role || 'member').toLowerCase()}</div>
@@ -2198,9 +2246,26 @@ footer{
     }).join('');
   }
 
+  let _teamBase = [], _staffExtra = {};
+  function renderTeamCombined() {
+    const merged = _teamBase.slice();
+    const haveKeys = new Set(_teamBase.map(m => m._teamKey).filter(Boolean));
+    Object.values(_staffExtra).forEach(s => {
+      if (!s || s.approved === false || !s.username) return;
+      if (s.teamKey && haveKeys.has(s.teamKey)) return; // already shown via team entry
+      merged.push({ name: s.username, role: s.role || 'Staff', mcname: s.mcname || null, avatar: s.avatar || null });
+    });
+    renderTeam(merged);
+  }
+
   db.ref('team').on('value', snapshot => {
     const data = snapshot.val() || {};
-    renderTeam(Object.values(data));
+    _teamBase = Object.entries(data).map(([k, m]) => ({ _teamKey: k, ...(m || {}) }));
+    renderTeamCombined();
+  });
+  db.ref('staff').on('value', snapshot => {
+    _staffExtra = snapshot.val() || {};
+    renderTeamCombined();
   });
 
   // ---- Next Update Countdown ----
@@ -2393,6 +2458,9 @@ footer{
   let cosmeticsCatalogRef = null;
   let cosmeticsCatalogCb = null;
   let cosmeticsCatalogData = null;
+  // Cosmetics removed by owner request — hidden from store even if GitHub repo still lists them.
+  const SOUL_REMOVED_COSMETICS = new Set(['cape-chick', 'cape-new', 'snow-cape']);
+  function soulIsRemovedCosmetic(id) { return !!id && SOUL_REMOVED_COSMETICS.has(String(id).toLowerCase()); }
   let cosShow2D = false;
   let cosSearchQuery = '';
   let soulGridGen = 0;
@@ -2416,7 +2484,7 @@ footer{
     try { if (typeof soulDisposeAllMinis === 'function') soulDisposeAllMinis(); } catch (_) {}
     try { soulGridGen++; } catch (_) {}
     const data = cosmeticsCatalogData || {};
-    let entries = Object.entries(data);
+    let entries = Object.entries(data).filter(([id]) => !soulIsRemovedCosmetic(id));
     if (cosSearchQuery) {
       const q = cosSearchQuery;
       // Match ignoring dashes/underscores/spaces so "dark sky" finds "dark-sky".
@@ -2520,6 +2588,7 @@ footer{
     cosmeticsCatalogRef = db.ref('capes/catalog');
     cosmeticsCatalogCb = snap => {
       cosmeticsCatalogData = snap.val() || {};
+      try { for (const rid of SOUL_REMOVED_COSMETICS) delete cosmeticsCatalogData[rid]; } catch (_) {}
       renderCosmeticsGrid();
       try { if (typeof soulGithubEnrichCatalog === 'function') soulGithubEnrichCatalog(); } catch (_) {}
     };
@@ -2697,7 +2766,7 @@ footer{
         div.innerHTML = `
           <div class="cm-avatar"><img src="${avatar}" onerror="this.parentNode.innerHTML='<i class=&quot;fa-solid fa-user&quot;></i>';"></div>
           <div class="cm-body">
-            <div class="cm-name">${name}${isMine ? '' : '<span class="cm-tag">STAFF</span>'}</div>
+            <div class="cm-name">${name}${isMine ? '' : roleBadgeHtml(m.senderRole || staffRoleFor(name) || 'Staff')}</div>
             <div>${rendered}${imgHtml}</div>
             <div class="cm-time">${new Date(m.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
           </div>
@@ -2820,7 +2889,7 @@ footer{
             .replace(/^.*\(Application:?\s*/, '')
             .replace(/^.*\(Purchase:?\s*/, '')
             .replace(/\)\s*$/, '');
-          return { ticketId: id, itemName, isApp, timestamp: t.timestamp, lastMessage: t.lastMessage, adminName: t.lastAdminName || t.assignedAdmin || '', adminAvatar: t.lastAdminAvatar || '', createdAt: t.timestamp };
+          return { ticketId: id, itemName, isApp, timestamp: t.timestamp, lastMessage: t.lastMessage, adminName: t.lastAdminName || t.assignedAdmin || '', adminAvatar: t.lastAdminAvatar || '', adminRole: t.lastAdminRole || '', createdAt: t.timestamp };
         });
       const merged = [];
       const seen = new Set();
@@ -2844,7 +2913,7 @@ footer{
           const statusColor = status === 'accepted' ? '#22c55e' : status === 'rejected' ? '#ef4444' : '#fbbf24';
           const label = (t.itemName || 'Purchase') + (t.isApp ? ' Application' : '');
           const statusBadge = status ? `<span style="display:inline-block;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${statusColor};border:1px solid ${statusColor};padding:3px 8px;">${status.toUpperCase()}</span>` : '';
-          const adminLine = t.adminName ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;"><img src="${(t.adminAvatar || 'soul.png').replace(/'/g, "\\'")}" style="width:18px;height:18px;border:1px solid var(--ink);object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'"><span style="font-weight:700;">${t.adminName}</span><span style="opacity:.5;font-size:10px;">replied</span></div>` : `<div style="margin-top:6px;font-size:10px;opacity:.5;font-family:'JetBrains Mono',monospace;">Awaiting staff reply</div>`;
+          const adminLine = t.adminName ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;"><img src="${(t.adminAvatar || 'soul.png').replace(/'/g, "\\'")}" style="width:18px;height:18px;border:1px solid var(--ink);object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'"><span style="font-weight:700;">${t.adminName}</span>${roleBadgeHtml(t.adminRole || staffRoleFor(t.adminName))}<span style="opacity:.5;font-size:10px;">replied</span></div>` : `<div style="margin-top:6px;font-size:10px;opacity:.5;font-family:'JetBrains Mono',monospace;">Awaiting staff reply</div>`;
           return `<div class="cos-ticket" onclick="openChat('${t.ticketId}','${username}','${label.replace(/'/g, "\\'")}')">
           <div style="flex:1;min-width:0;">
             <span class="cos-ticket-badge">${label} <span id="ticket-count-${t.ticketId}" class="ticket-admin-count" style="display:none;margin-left:6px;background:var(--alert);color:#fff;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:1px 6px;vertical-align:middle;"></span></span>
@@ -3201,8 +3270,8 @@ footer{
     });
   }
 
-  // ---- Jobs ----
-  const jobRoles = {
+  // ---- Jobs (roles are admin-managed in Firebase `job_roles`; below is fallback) ----
+  let jobRoles = {
     admin: {
       name: 'Admin', icon: 'fa-solid fa-crown',
       desc: 'Oversee the whole Soul Client community and team. Handle serious disputes, ban appeals, and help shape the project\'s direction.',
@@ -3312,6 +3381,27 @@ footer{
     renderJobGrid();
   });
 
+  // Dynamic roles created by admin (Firebase `job_roles/{id}` = {name, icon, desc, questions[]}).
+  // Overrides the hardcoded fallback above when present.
+  db.ref('job_roles').on('value', snap => {
+    const data = snap.val() || {};
+    const ids = Object.keys(data).filter(id => data[id] && data[id].name);
+    if (ids.length === 0) return;
+    const dyn = {};
+    ids.forEach(id => {
+      const r = data[id];
+      dyn[id] = {
+        name: r.name,
+        icon: r.icon || 'fa-solid fa-briefcase',
+        desc: r.desc || '',
+        questions: Array.isArray(r.questions) ? r.questions.filter(q => q && String(q).trim()) : []
+      };
+    });
+    jobRoles = dyn;
+    try { renderJobGrid(); } catch (e) {}
+    if (selectedJob && !jobRoles[selectedJob]) { try { jobBackToList(); } catch (e) {} }
+  });
+
   function isJobFull(role) {
     const lim = jobLimitsData[role] || {};
     const max = Number(lim.max) || 0;
@@ -3417,7 +3507,8 @@ footer{
         id: appId,
         role: selectedJob, roleName: job.name,
         name, username, minecraftIgn: ign,
-        answers, status: 'pending', unread: true, createdAt: Date.now()
+        answers, questions: job.questions,
+        status: 'pending', unread: true, createdAt: Date.now()
       };
       updates[`support_tickets/${appId}`] = {
         id: appId, name: `${username} (Application: ${job.name})`,
@@ -3942,6 +4033,7 @@ footer{
         if (!name) continue;
         if (e.type === 'file' && /\.png$/i.test(name)) {
           const cid = name.slice(0, -4);
+          if (soulIsRemovedCosmetic(cid)) continue;
           if (!cosmeticsCatalogData[cid]) {
             cosmeticsCatalogData[cid] = { id: cid, name: soulGhDisplayName(cid), category: 'CAPE', texture: 'github/capes/' + name, free: true, animated: false };
             added.push(cid);
@@ -3949,6 +4041,7 @@ footer{
         } else if (e.type === 'dir') dirs.push(name);
       }
       for (const d of dirs) {
+        if (soulIsRemovedCosmetic(d)) continue;
         if (cosmeticsCatalogData[d]) continue;
         const sub = await soulGhList('capes/' + d);
         const frames = sub ? sub.filter(x => x && x.type === 'file' && /\.png$/i.test(x.name || '')).length : 0;
