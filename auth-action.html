@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soul - Verify Email</title>
+    <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <div id="message">Processing...</div>
+
+    <script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyCAalZXTgdIg58oip1Ang5CJVPRdp9YzzQ",
+        authDomain: "soul-backend.firebaseapp.com",
+        databaseURL: "https://soul-backend-default-rtdb.firebaseio.com",
+        projectId: "soul-backend",
+        storageBucket: "soul-backend.firebasestorage.app",
+        messagingSenderId: "553383169433",
+        appId: "1:553383169433:web:03aa34c90ebda216169708"
+    };
+
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+
+    const auth = firebase.auth();
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode');        // 'verifyEmail', 'resetPassword', etc.
+    const oobCode = params.get('oobCode');  // the action code
+    const apiKey = params.get('apiKey');
+    const msgEl = document.getElementById('message');
+
+    async function handleAction() {
+        try {
+            if (mode === 'verifyEmail' && oobCode) {
+                await auth.applyActionCode(oobCode);
+                msgEl.textContent = '✅ Email verified successfully! You can now sign in to Soul Launcher.';
+                msgEl.style.color = '#22c55e';
+            } else if (mode === 'resetPassword' && oobCode) {
+                // For password reset, redirect to a password reset page or show code
+                msgEl.textContent = 'Password reset code: ' + oobCode;
+                msgEl.style.color = '#3b82f6';
+            } else if (mode === 'signIn' && oobCode) {
+                await auth.applyActionCode(oobCode);
+                msgEl.textContent = '✅ Sign-in link verified!';
+                msgEl.style.color = '#22c55e';
+            } else {
+                msgEl.textContent = '❌ Invalid or missing action parameters.';
+                msgEl.style.color = '#ef4444';
+            }
+        } catch (err) {
+            console.error(err);
+            msgEl.textContent = '❌ Failed: ' + (err.message || 'Unknown error');
+            msgEl.style.color = '#ef4444';
+        }
+    }
+
+    handleAction();
+    </script>
+</body>
+</html>
