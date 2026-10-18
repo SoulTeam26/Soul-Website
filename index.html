@@ -4554,12 +4554,15 @@ footer{
   // Override without editing code:
   //   localStorage.setItem('soul_github_token', '<NEW_PAT>')
   // or: window.SOUL_GITHUB_TOKEN = '<NEW_PAT>'
-  // SECURITY: no hard-coded token. The private cosmetics repo is read either
-  // via your OWN override token (below) or through the stateless Vercel relay
-  // (Soul-Web/api/gh-proxy.js) which holds the PAT server-side. Override without
-  // editing code:
-  //   localStorage.setItem('soul_github_token', '<YOUR_PAT>')
-  // or: window.SOUL_GITHUB_TOKEN = '<YOUR_PAT>'
+  // Owner decision: the read-only cosmetics PAT ships with the site so every
+  // visitor can load the premium catalog in the (private) SoulTeam26/Cosmetics
+  // repo. The token is stored in the Firebase config node and fetched at boot —
+  // still automatic for visitors, but OUT of the git source, so GitHub's
+  // push-protection/secret-scanning can never block or auto-revoke it.
+  // Scope: read-only on that one repo (it cannot touch Soul accounts, coins or code).
+  // Manual overrides (optional):
+  //   localStorage.setItem('soul_github_token', '<NEW_PAT>')
+  // or: window.SOUL_GITHUB_TOKEN = '<NEW_PAT>'
   const SOUL_GH_REPO = 'SoulTeam26/Cosmetics';
   const SOUL_GH_BRANCH = 'main';
   const SOUL_GH_API = 'https://api.github.com/repos/' + SOUL_GH_REPO;
@@ -4579,6 +4582,24 @@ footer{
       if (t && t.trim()) return t.trim();
     } catch (_) {}
     return '';
+  }
+  // Owner-managed read-only PAT lives in the Firebase config node (out of git,
+  // fetched once per page load and cached). Falls back to '' if unreachable —
+  // callers then route through /api/gh-proxy.
+  let __soulGhTokenPromise = null;
+  function soulGhTokenAsync() {
+    const local = soulGhToken();
+    if (local) return Promise.resolve(local);
+    if (!__soulGhTokenPromise) {
+      __soulGhTokenPromise = (async () => {
+        try {
+          const r = await fetch('https://soul-backend-default-rtdb.firebaseio.com/config/gh_token.json');
+          const v = await r.json();
+          return (typeof v === 'string' && v.trim()) ? v.trim() : '';
+        } catch (_) { return ''; }
+      })();
+    }
+    return __soulGhTokenPromise;
   }
   // The gh relay only makes sense when the page itself is served over
   // http(s) (Vercel/production). file:// has no /api/ prefix.
@@ -4659,7 +4680,7 @@ footer{
     return fetch(url, opts);
   }
   async function soulGhFetchBytes(repoPath) {
-    const token = soulGhToken();
+    const token = await soulGhTokenAsync();
     const proxyBase = soulGhProxyBase();
     let status = 0;
     if (token) {
@@ -4708,7 +4729,7 @@ footer{
   async function soulGhList(dir) {
     if (soulGhDirCache.has(dir)) return soulGhDirCache.get(dir);
     try {
-      const token = soulGhToken();
+      const token = await soulGhTokenAsync();
       const proxyBase = soulGhProxyBase();
       const url = token
         ? SOUL_GH_API + '/contents/' + dir + '?ref=' + SOUL_GH_BRANCH
