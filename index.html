@@ -3229,24 +3229,39 @@ footer{
       return null;
     }
     if (user.type === 'microsoft') {
-      // Real OAuth logins carry a stored, verified UUID. Legacy username-based
-      // accounts are resolved online once, then the result is persisted so the
-      // wallet key stays stable even if Mojang/ashcon are unreachable later.
+      // Real pairing/OAuth logins carry a stored, verified UUID. Detection is
+      // deliberately OFFLINE-FIRST so it works even when Mojang/ashcon are
+      // unreachable: recover the UUID from the account's own verified id
+      // ("ms-<32hex>", written at claim/login time) or from the saved account
+      // list. Only fall back to the online lookup when neither is present.
       try {
-        let uuid = (user.uuid || '').replace(/-/g, '') || null;
+        let uuid = (user.uuid || '').replace(/-/g, '').toLowerCase() || null;
+        if (!uuid && user.id) {
+          const m = String(user.id).trim().toLowerCase().match(/^ms[-_]?([0-9a-f]{32})$/);
+          if (m) uuid = m[1];
+        }
+        if (!uuid) {
+          try {
+            const accs = getCoinsAccounts();
+            const same = accs.find(a => a.id === user.id)
+              || accs.find(a => a.type === 'microsoft' && a.name === user.name);
+            const cand = same && String(same.uuid || '').replace(/-/g, '').toLowerCase();
+            if (cand && /^[0-9a-f]{32}$/.test(cand)) uuid = cand;
+          } catch (e) {}
+        }
         if (!uuid) {
           uuid = await resolvePlayerId(user.name, 'microsoft');
-          if (uuid) {
-            // remember the verified UUID on the account record (best effort)
-            try {
-              const accs = getCoinsAccounts();
-              const i = accs.findIndex(act => act.name === user.name && act.type === 'microsoft');
-              if (i >= 0) { accs[i].uuid = uuid; accs[i].verified = true; localStorage.setItem('soul_accounts', JSON.stringify(accs)); }
-              setCurrentCoinsAccount({ ...user, uuid, verified: true });
-            } catch (e) {}
-          }
         }
         if (uuid && /^[0-9a-f]{32}$/.test(uuid)) {
+          // persist the recovered UUID so future checks are instant
+          try {
+            const accs = getCoinsAccounts();
+            const i = accs.findIndex(act => act.name === user.name && act.type === 'microsoft');
+            if (i >= 0 && accs[i].uuid !== uuid) { accs[i].uuid = uuid; accs[i].verified = true; localStorage.setItem('soul_accounts', JSON.stringify(accs)); }
+            if (!user.uuid || user.uuid.replace(/-/g, '').toLowerCase() !== uuid) {
+              setCurrentCoinsAccount({ ...user, uuid, verified: true });
+            }
+          } catch (e) {}
           return { key: 'ms_' + ecoSanKey(uuid), type: 'microsoft', user };
         }
       } catch (e) {}
@@ -3487,7 +3502,7 @@ footer{
           <div style="font-weight:800;">${offline ? 'Offline Account — Soul Coins Locked' : 'Account Not Verified'}</div>
           <div style="font-size:12px;color:var(--ink-soft);margin-top:8px;line-height:1.6;">${offline
             ? 'For security, offline accounts have completely restricted access to Soul Coins and cosmetics. Sign in with a Microsoft or Soul account — every wallet is tied to a verified account ID that can never be shared or transferred.'
-            : 'We could not verify this account\u2019s identity. Please use a Microsoft or Soul account to access Soul Coins.'}</div>
+            : 'We could not verify this Microsoft identity. Old saved entries from before Launcher linking can\u2019t be verified: click the trash icon on it above, then re-add it via <b>Login with Minecraft → Link with Soul Launcher</b> (enter the code from your launcher). That stores a cryptographically verified identity instantly.'}</div>
         </div>`;
       return;
     }
