@@ -2480,6 +2480,14 @@ footer{
       if (s.teamKey && haveKeys.has(s.teamKey)) return; // already shown via team entry
       merged.push({ name: s.username, role: s.role || 'Staff', mcname: s.mcname || null, avatar: s.avatar || null });
     });
+    // Higher roles first: Owner > Manager > Admin > Developer > Staff > rest.
+    // Sort is stable, so members of the same role keep their join order.
+    const roleRank = (r) => {
+      const k = String(r || '').trim().toLowerCase();
+      const map = { 'owner': 0, 'co-owner': 0, 'manager': 1, 'admin': 2, 'developer': 3, 'dev': 3, 'staff': 4, 'helper': 5 };
+      return map[k] !== undefined ? map[k] : 6;
+    };
+    merged.sort((a, b) => roleRank(a.role) - roleRank(b.role));
     renderTeam(merged);
   }
 
