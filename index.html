@@ -6393,37 +6393,27 @@ function updateSoulAuthUI() {
 		const displayName = cur ? cur.name : ((user && user.email) || '').split('@')[0];
 		const mail = (cur && cur.type === 'soul' && cur.email) ? cur.email : ((user && user.email) || '');
 		let typeLabel;
-		if (!cur) typeLabel = (user && user.emailVerified) ? 'Soul Account (Verified)' : 'Soul Account (Unverified)';
-		else if (cur.type === 'microsoft') typeLabel = cur.verified ? 'Microsoft Account · Verified' : 'Microsoft Account';
-		else if (cur.type === 'offline') typeLabel = 'Offline Account';
-		else typeLabel = (!user || user.emailVerified) ? `Soul Account · ${mail}` : 'Soul Account (Unverified)';
+		if (!cur) typeLabel = (user && user.emailVerified) ? 'Soul · Verified' : 'Soul';
+		else if (cur.type === 'microsoft') typeLabel = cur.verified ? 'Microsoft · Verified' : 'Microsoft';
+		else if (cur.type === 'offline') typeLabel = 'Offline';
+		else typeLabel = (!user || user.emailVerified) ? ('Soul · ' + mail) : 'Soul';
 		const avatar = cur
 			? (cur.skin || `https://minotar.net/helm/${encodeURIComponent(displayName)}/64.png`)
 			: `https://minotar.net/helm/${encodeURIComponent(displayName)}/64.png`;
-		
-		// Desktop trigger
-		const dtAvatar = document.getElementById('desktop-soul-acc-avatar');
-		const dtName = document.getElementById('desktop-soul-acc-name');
-		const dtType = document.getElementById('desktop-soul-acc-type');
-		if (dtAvatar) dtAvatar.src = avatar;
-		if (dtName) dtName.textContent = displayName;
-		if (dtType) dtType.textContent = typeLabel;
-		
-		// Mobile trigger
-		const mtAvatar = document.getElementById('mobile-soul-acc-avatar');
-		const mtName = document.getElementById('mobile-soul-acc-name');
-		const mtType = document.getElementById('mobile-soul-acc-type');
-		if (mtAvatar) mtAvatar.src = avatar;
-		if (mtName) mtName.textContent = displayName;
-		if (mtType) mtType.textContent = typeLabel;
-		
-		// Footer trigger
-		const ftAvatar = document.getElementById('footer-soul-acc-avatar');
-		const ftName = document.getElementById('footer-soul-acc-name');
-		const ftType = document.getElementById('footer-soul-acc-type');
-		if (ftAvatar) ftAvatar.src = avatar;
-		if (ftName) ftName.textContent = displayName;
-		if (ftType) ftType.textContent = typeLabel;
+
+		// Set avatar/name/type on all three triggers (desktop, mobile, footer).
+		// Name & type get a hard clamp so long names/labels can never overflow
+		// the chip or wrap onto it.
+		[['desktop-soul-acc-avatar', 'desktop-soul-acc-name', 'desktop-soul-acc-type'],
+		 ['mobile-soul-acc-avatar', 'mobile-soul-acc-name', 'mobile-soul-acc-type'],
+		 ['footer-soul-acc-avatar', 'footer-soul-acc-name', 'footer-soul-acc-type']].forEach(([aid, nid, tid]) => {
+			const av = document.getElementById(aid);
+			if (av) { av.src = avatar; av.onerror = function () { this.onerror = null; this.src = 'soul.png'; }; }
+			const nm = document.getElementById(nid);
+			if (nm) { nm.textContent = displayName; nm.style.maxWidth = '150px'; nm.style.overflow = 'hidden'; nm.style.textOverflow = 'ellipsis'; nm.style.whiteSpace = 'nowrap'; }
+			const tp = document.getElementById(tid);
+			if (tp) { tp.textContent = typeLabel; tp.style.maxWidth = '170px'; tp.style.overflow = 'hidden'; tp.style.textOverflow = 'ellipsis'; tp.style.whiteSpace = 'nowrap'; }
+		});
 		
 		// Show switchers, hide CTAs
 		[desktopSwitcher, mobileSwitcher, footerSwitcher].forEach(el => { if (el) el.style.display = ''; });
