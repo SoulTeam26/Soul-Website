@@ -2764,7 +2764,12 @@ footer{
     }
     const eco = await getEcoIdentity();
     const ownedIds = eco ? await ecoOwnedSet(eco.key) : new Set();
-    if (eco) { ecoWatchBalance(eco.key); }
+    if (eco) {
+      ecoWatchBalance(eco.key);
+      // First render must show a real number, not "—": the watch callback's
+      // initial event usually fires while another page is still active.
+      if (ecoBalance === null) await ecoReadBalance(eco.key);
+    }
     grid.innerHTML = entries.map(([id, item]) => {
       const managed0 = (typeof soulGhIsManaged === 'function' && soulGhIsManaged(item));
       const imgSrc = item.icon || item.preview || (managed0 ? soulBlackCapeURL() : (`Capes/${id}.png`));
@@ -3509,6 +3514,9 @@ footer{
 
     loginArea.style.display = 'none';
     content.style.display = '';
+    // Always pull a fresh balance when the Coins page opens (cached value
+    // alone can still be null if the watcher fired on another page).
+    if (ecoBalance === null) await ecoReadBalance(eco.key);
     const balEl = document.getElementById('coins-balance-big');
     balEl.textContent = ecoBalance === null ? '—' : ecoBalance.toLocaleString();
     document.getElementById('coins-eco-id').textContent = 'Ledger ID: ' + eco.key;
