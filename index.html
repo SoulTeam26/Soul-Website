@@ -6363,26 +6363,40 @@ function initSoulAuth() {
 function updateSoulAuthUI() {
 	const rawUser = soulAuth ? soulAuth.currentUser : null;
 	const user = (rawUser && rawUser.emailVerified) ? rawUser : null;
+	// The chip shows for ANY active login — Firebase Soul accounts AND
+	// Microsoft/offline coin accounts (picked via "Login with Minecraft"
+	// or the launcher pairing code) — not just Firebase sessions.
+	let activeAccount = null;
+	try { activeAccount = JSON.parse(localStorage.getItem('soul_current') || 'null'); } catch (e) {}
+	if (!user && !activeAccount) {
+		// nothing logged in anywhere → hide switcher, show "Soul Login"
+		const desktopSwitcher = document.getElementById('desktop-soul-account-switcher');
+		const mobileSwitcher = document.getElementById('mobile-soul-account-switcher');
+		const footerSwitcher = document.getElementById('footer-soul-account-switcher');
+		[desktopSwitcher, mobileSwitcher, footerSwitcher].forEach(el => { if (el) el.style.display = 'none'; });
+		const ctas = document.querySelectorAll('.soul-login-cta');
+		[ctas[0], ctas[1]].forEach(el => { if (el) el.style.display = ''; });
+		return;
+	}
 	const desktopSwitcher = document.getElementById('desktop-soul-account-switcher');
 	const mobileSwitcher = document.getElementById('mobile-soul-account-switcher');
 	const footerSwitcher = document.getElementById('footer-soul-account-switcher');
 	const desktopCta = document.querySelector('.soul-login-cta');
 	const mobileCta = document.querySelectorAll('.soul-login-cta')[1];
 	
-	if (user) {
+	if (user || activeAccount) {
 		// The header chip mirrors the ACTIVE (selected) account so the wallet /
 		// store identity and the chip never disagree. Soul accounts show the
 		// full email instead of the username.
-		let cur = null;
-		try { cur = JSON.parse(localStorage.getItem('soul_current') || 'null'); } catch (e) {}
-		if (cur && cur.type === 'soul' && cur.id !== user.uid) cur = null; // stale selection
-		const displayName = cur ? cur.name : (user.email || '').split('@')[0];
-		const mail = (cur && cur.type === 'soul' && cur.email) ? cur.email : user.email;
+		let cur = activeAccount;
+		if (cur && cur.type === 'soul' && user && cur.id !== user.uid) cur = null; // stale selection
+		const displayName = cur ? cur.name : ((user && user.email) || '').split('@')[0];
+		const mail = (cur && cur.type === 'soul' && cur.email) ? cur.email : ((user && user.email) || '');
 		let typeLabel;
-		if (!cur) typeLabel = user.emailVerified ? 'Soul Account (Verified)' : 'Soul Account (Unverified)';
+		if (!cur) typeLabel = (user && user.emailVerified) ? 'Soul Account (Verified)' : 'Soul Account (Unverified)';
 		else if (cur.type === 'microsoft') typeLabel = cur.verified ? 'Microsoft Account · Verified' : 'Microsoft Account';
 		else if (cur.type === 'offline') typeLabel = 'Offline Account';
-		else typeLabel = user.emailVerified ? `Soul Account · ${mail}` : 'Soul Account (Unverified)';
+		else typeLabel = (!user || user.emailVerified) ? `Soul Account · ${mail}` : 'Soul Account (Unverified)';
 		const avatar = cur
 			? (cur.skin || `https://minotar.net/helm/${encodeURIComponent(displayName)}/64.png`)
 			: `https://minotar.net/helm/${encodeURIComponent(displayName)}/64.png`;
@@ -6497,12 +6511,11 @@ window.closeSoulAccList = () => {
 window.logoutSoulAll = () => {
 	closeSoulAccList();
 	if (soulAuth) soulAuth.signOut().catch(() => {});
-	try {
-		const cur = JSON.parse(localStorage.getItem('soul_current') || 'null');
-		if (!cur || cur.type === 'soul') localStorage.removeItem('soul_current');
-	} catch (e) {}
+	// "Sign out of ALL accounts": clear the active coin account no matter
+	// which type it is (Soul, Microsoft or offline).
+	localStorage.removeItem('soul_current');
 	updateSoulAuthUI();
-	window.notifications && window.notifications.show('info', 'Signed Out', 'You are signed out of your Soul account.');
+	window.notifications && window.notifications.show('info', 'Signed Out', 'You are signed out of all accounts.');
 };
 
 window.selectSoulAcc = (id, name, type, e) => {
