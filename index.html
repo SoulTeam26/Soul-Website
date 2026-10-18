@@ -11,6 +11,34 @@
 <link rel="canonical" href="https://soullauncher.vercel.app/">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-auth-compat.js"></script>
+<script>
+// ================= MICROSOFT / MINECRAFT OAUTH RETURN HANDLER =================
+// Handles the redirect back from login.microsoftonline.com. Works both when
+// the login page runs as an opened POPUP (sends the code to the opener and
+// closes itself) and when the login page itself navigated away and returned
+// (reads the code locally via the stored PKCE state).
+      (function () {
+        try {
+          if (!location.hash) return;
+          var frag = new URLSearchParams(location.hash.substring(1));
+          if (!frag.get('code') && !frag.get('error')) return;
+          var payload = {
+            source: 'soul-ms-login',
+            code: frag.get('code'),
+            state: frag.get('state'),
+            error: frag.get('error'),
+            errorDescription: frag.get('error_description')
+          };
+          if (window.opener && !window.opener.closed) {
+            try { window.opener.postMessage(payload, location.origin); } catch (e) {}
+            setTimeout(function () { try { window.close(); } catch (e) {} }, 200);
+          } else {
+            sessionStorage.setItem('soul_ms_oauth_return', JSON.stringify(payload));
+          }
+        } catch (e) {}
+      })();
+</script>
 <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <link rel="shortcut icon" href="soul.png" type="image/x-icon">
@@ -53,10 +81,15 @@
   --bolt-deep:#1f82c8;
   --alert:#FFB13B;
   --line:#F5F1ED;
+  --line-dim:rgba(245,241,237,0.18);
+  --paper-2:#1A1818;
   --radius:0px;
 }
 *{box-sizing:border-box;}
 html{scroll-behavior:smooth;}
+/* Global utility (was missing — broke every .hidden toggle, e.g. the Soul account
+   switcher dropdown arrow on the launcher-style account box) */
+.hidden{display:none !important;}
 body{
   margin:0;
   background-color:var(--paper);
@@ -96,7 +129,7 @@ a:focus-visible, button:focus-visible{
 /* ---------- snow overlay ---------- */
 .snow-canvas{
   position:fixed;inset:0;width:100%;height:100%;
-  z-index:9999;pointer-events:none;
+  z-index:-1;pointer-events:none;
 }
 
 /* ---------- top nav ---------- */
@@ -1113,6 +1146,15 @@ footer{
 .coin-acc-item:hover .acc-type{color:var(--ink);}
 .coin-acc-item .acc-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:4px;}
 .coin-acc-item .acc-remove:hover{color:var(--ink);}
+/* coin package buy button (standalone — .cos-buy-btn is scoped to .cosmetics-card) */
+.coin-buy-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  padding:12px 18px;margin-top:8px;border:2px solid var(--ink);background:var(--ink);color:var(--paper);
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;letter-spacing:.05em;
+  text-transform:uppercase;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;
+  box-shadow:4px 4px 0 var(--bolt-deep);}
+.coin-buy-btn:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--bolt-deep);background:var(--bolt);color:var(--ink);border-color:var(--bolt);}
+.coin-buy-btn:active{transform:translate(0,0);box-shadow:2px 2px 0 var(--bolt-deep);}
+.coin-buy-btn img{width:15px;height:15px;object-fit:contain;}
 
 /* ---------- coins modals ---------- */
 .coin-modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.82);
@@ -1312,6 +1354,64 @@ footer{
   .mobile-nav-inner a{font-size:17px;padding:7px 0}
   .mobile-nav .mobile-close{top:12px;right:14px}
 }
+.soul-account-switcher{position:relative;}
+.soul-account-trigger{display:flex;align-items:center;gap:10px;padding:10px 14px;border:2px solid var(--line-dim);background:var(--paper-2);cursor:pointer;transition:border-color .12s;border-radius:6px;}
+.soul-account-trigger:hover,.soul-account-trigger.active{border-color:var(--ink);}
+.soul-acc-avatar{width:34px;height:34px;border:2px solid var(--ink);object-fit:cover;border-radius:4px;background:var(--paper-dim);flex-shrink:0;}
+.soul-acc-info{display:flex;flex-direction:column;flex:1;min-width:0;}
+.soul-acc-name{font-weight:700;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.soul-acc-type{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;}
+.soul-acc-actions{display:flex;align-items:center;gap:8px;}
+.soul-acc-arrow{color:var(--muted);font-size:11px;}
+.soul-acc-arrow-btn{background:transparent;border:none;cursor:pointer;padding:6px;display:flex;align-items:center;justify-content:center;min-width:28px;min-height:28px;border-radius:4px;}
+.soul-acc-arrow-btn:hover{background:var(--paper-dim);}
+.soul-acc-dropdown{position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--paper-2);border:2px solid var(--ink);max-height:240px;overflow-y:auto;z-index:30;box-shadow:6px 6px 0 var(--paper-dim);border-radius:6px;}
+.soul-acc-dropdown .soul-acc-card{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line-dim);cursor:pointer;transition:background .12s;}
+.soul-acc-dropdown .soul-acc-card:hover{background:var(--paper-dim);}
+.soul-acc-dropdown .soul-acc-card:last-child{border-bottom:none;}
+.soul-acc-dropdown .soul-acc-card.active{border-left:3px solid var(--bolt);background:rgba(48,176,255,.08);}
+.soul-acc-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:4px;}
+.soul-acc-remove:hover{color:var(--bolt);}
+.soul-acc-logout{width:100%;padding:10px 14px;border:none;background:transparent;color:var(--ink);font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;text-transform:uppercase;cursor:pointer;text-align:left;border-top:1px solid var(--line-dim);}
+.soul-acc-logout:hover{background:var(--paper-dim);}
+.soul-acc-empty{padding:14px;text-align:center;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px;}
+.soul-hint{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);text-align:center;letter-spacing:.03em;}
+.spam-warning{margin-top:14px;padding:12px 14px;background:rgba(255,177,59,0.15);border:2px solid rgba(255,177,59,0.35);color:#ffd166;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.03em;border-radius:var(--radius);display:flex;align-items:flex-start;gap:10px;}
+.spam-warning i{color:#ffb13b;font-size:14px;margin-top:2px;}
+.spam-warning b{color:#ffd166;}
+.auth-error{margin-top:12px;padding:10px 14px;background:rgba(239,68,68,0.15);border:2px solid rgba(239,68,68,0.35);color:#fca5a5;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.03em;display:none;border-radius:8px;}
+.auth-error.show{display:block;}
+.soul-hint{margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);text-align:center;letter-spacing:.03em;}
+.soul-account-switcher{position:relative;display:inline-flex;}
+.soul-account-trigger{display:flex;align-items:center;gap:10px;padding:10px 14px;border:2px solid var(--line-dim);background:var(--paper-2);cursor:pointer;transition:border-color .12s;border-radius:6px;}
+.soul-account-trigger:hover,.soul-account-trigger.active{border-color:var(--ink);}
+.soul-acc-avatar{width:34px;height:34px;border:2px solid var(--ink);object-fit:cover;border-radius:4px;background:var(--paper-dim);flex-shrink:0;}
+.soul-acc-info{display:flex;flex-direction:column;flex:1;min-width:0;}
+.soul-acc-name{font-weight:700;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.soul-acc-type{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;}
+.soul-acc-arrow{color:var(--muted);font-size:11px;}
+.soul-acc-arrow-btn{background:transparent;border:none;cursor:pointer;padding:6px;display:flex;align-items:center;justify-content:center;min-width:28px;min-height:28px;border-radius:4px;}
+.soul-acc-arrow-btn:hover{background:var(--paper-dim);}
+.soul-acc-actions{display:flex;align-items:center;gap:8px;}
+.soul-acc-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:4px;}
+.soul-acc-remove:hover{color:var(--bolt);}
+.soul-acc-dropdown{position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--paper-2);border:2px solid var(--ink);max-height:240px;overflow-y:auto;z-index:30;box-shadow:6px 6px 0 var(--paper-dim);border-radius:6px;}
+.soul-acc-dropdown .soul-acc-card{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line-dim);cursor:pointer;transition:background .12s;}
+.soul-acc-dropdown .soul-acc-card:hover{background:var(--paper-dim);}
+.soul-acc-dropdown .soul-acc-card:last-child{border-bottom:none;}
+.soul-acc-dropdown .soul-acc-card.active{border-left:3px solid var(--bolt);background:rgba(48,176,255,.08);}
+.soul-acc-empty{padding:14px;text-align:center;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px;}
+.spam-warning{margin-top:14px;padding:12px 14px;background:rgba(255,177,59,0.15);border:2px solid rgba(255,177,59,0.35);color:#ffd166;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.03em;border-radius:8px;display:flex;align-items:flex-start;gap:10px;}
+.spam-warning i{color:#ffb13b;font-size:14px;margin-top:2px;}
+.spam-warning b{color:#ffd166;}
+/* ---------- soul auth (login modal) ---------- */
+.auth-input-group{display:flex;flex-direction:column;gap:10px;}
+.auth-input-group input{padding:12px 14px;background:var(--paper-dim);border:2px solid var(--line);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;outline:none;border-radius:var(--radius);}
+.auth-input-group input:focus{border-color:var(--bolt);}
+.auth-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:13px 18px;border:2px solid var(--ink);background:var(--ink);color:var(--paper);font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;transition:transform .12s,box-shadow .12s;box-shadow:5px 5px 0 var(--bolt-deep);}
+.auth-btn:hover{transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--bolt-deep);}
+.auth-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none;box-shadow:5px 5px 0 var(--line-dim);}
+.auth-hint{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);text-align:center;letter-spacing:.03em;}
 </style>
 </head>
 <body>
@@ -1333,32 +1433,57 @@ footer{
 <a href="#home" onclick="showMainContent();return false;">Home</a>
       <a href="#features" onclick="showMainContent()">Features</a>
       <a href="#download" onclick="showMainContent()">Download</a>
-      <a href="#preview" onclick="showMainContent()">Preview</a>
-      <a href="#cosmetics" onclick="showCosmeticsPage();return false;">Cosmetics</a>
-      <a href="#tickets" onclick="showTicketsPage();return false;">Tickets <span id="nav-tickets-badge" class="nav-badge" style="display:none;background:var(--bolt);color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 6px;margin-left:6px;vertical-align:middle;">0</span></a>
-      <a href="#posts" onclick="showPostsPage();return false;">Posts</a>
+      <a href="#cosmetics" onclick="showCosmeticsPage();return false;">Cosmetics</a><a href="#coins" onclick="showCoinsPage();return false;">Coins</a>
       <a href="#jobs" onclick="showJobsPage();return false;">Jobs</a>
       <a href="#devs" onclick="showMainContent()">Devs</a>
     </div>
     <button class="hamburger" id="hamburger" aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
-    <a href="#" onclick="showMainContent()" class="nav-cta">Get Soul</a>
+    <div id="desktop-soul-account-switcher" class="soul-account-switcher" style="display:none;">
+      <div class="soul-account-trigger" onclick="toggleSoulAccList('desktop')">
+        <img id="desktop-soul-acc-avatar" src="soul.png" class="soul-acc-avatar" alt="Player" onerror="this.src='soul.png'">
+        <div class="soul-acc-info">
+          <span class="soul-acc-name" id="desktop-soul-acc-name">Player</span>
+          <span class="soul-acc-type" id="desktop-soul-acc-type">Soul Account</span>
+        </div>
+        <button type="button" class="soul-acc-arrow-btn" onclick="event.stopPropagation(); toggleSoulAccList('desktop');" title="Toggle account list"><i class="fa-solid fa-chevron-down soul-acc-arrow"></i></button>
+        <div class="soul-acc-actions">
+          <button class="soul-acc-remove" title="Remove account" onclick="removeSoulAcc(event)"><i class="fa-solid fa-trash-can"></i></button>
+        </div>
+      </div>
+      <div id="desktop-soul-acc-dropdown" class="soul-acc-dropdown hidden">
+        <!-- accounts injected here -->
+      </div>
+    </div>
+    <a href="#" onclick="showSoulLogin();return false;" class="nav-cta soul-login-cta">Soul Login</a>
   </div>
 </nav>
 <nav class="mobile-nav" id="mobile-nav">
-  <div class="mobile-nav-inner">
     <a href="#" onclick="toggleMobileNav()" class="mobile-close">&times;</a>
     <a href="#home" onclick="showMainContent();return false;">Home</a>
-    <a href="#features" onclick="showMainContent()">Features</a>
     <a href="#download" onclick="showMainContent()">Download</a>
-    <a href="#preview" onclick="showMainContent()">Preview</a>
-    <a href="#cosmetics" onclick="showCosmeticsPage();return false;">Cosmetics</a>
-    <a href="#tickets" onclick="showTicketsPage();return false;">Tickets <span id="mobile-tickets-badge" class="nav-badge" style="display:none;background:var(--bolt);color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 6px;margin-left:6px;">0</span></a>
-    <a href="#posts" onclick="showPostsPage();return false;">Posts</a>
+    <a href="#cosmetics" onclick="showCosmeticsPage();return false;">Cosmetics</a><a href="#coins" onclick="showCoinsPage();return false;">Coins</a>
+
     <a href="#jobs" onclick="showJobsPage();return false;">Jobs</a>
     <a href="#devs" onclick="showMainContent()">Devs</a>
-    <a href="#download" onclick="showMainContent()" class="nav-cta">Get Soul</a>
+    <div id="mobile-soul-account-switcher" class="soul-account-switcher" style="display:none;margin-top:8px;width:100%;">
+      <div class="soul-account-trigger" onclick="toggleSoulAccList('mobile')">
+        <img id="mobile-soul-acc-avatar" src="soul.png" class="soul-acc-avatar" alt="Player" onerror="this.src='soul.png'">
+        <div class="soul-acc-info">
+          <span class="soul-acc-name" id="mobile-soul-acc-name">Player</span>
+          <span class="soul-acc-type" id="mobile-soul-acc-type">Soul Account</span>
+        </div>
+        <button type="button" class="soul-acc-arrow-btn" onclick="event.stopPropagation(); toggleSoulAccList('mobile');" title="Toggle account list"><i class="fa-solid fa-chevron-down soul-acc-arrow"></i></button>
+        <div class="soul-acc-actions">
+          <button class="soul-acc-remove" title="Remove account" onclick="removeSoulAcc(event)"><i class="fa-solid fa-trash-can"></i></button>
+        </div>
+      </div>
+      <div id="mobile-soul-acc-dropdown" class="soul-acc-dropdown hidden">
+        <!-- accounts injected here -->
+      </div>
+    </div>
+    <a href="#" onclick="showSoulLogin();return false;" class="nav-cta soul-login-cta">Soul Login</a>
   </div>
 </nav>
 
@@ -1414,24 +1539,138 @@ footer{
   </div>
 </div>
 
-<!-- Microsoft Login Modal -->
+<!-- Minecraft (Microsoft) Login Modal - REAL verified identity, two paths -->
 <div class="coin-modal-overlay" id="ms-modal">
   <div class="coin-modal">
-    <h3><i class="fa-brands fa-microsoft" style="margin-right:6px;"></i> Login with Microsoft</h3>
-    <p class="coin-modal-desc">Enter the Minecraft username linked to your Microsoft account. Your player head shows live as you type — just like in the launcher.</p>
-    <label class="cos-login-label" style="display:block;margin-bottom:8px;">Minecraft Username (3-16 chars)</label>
-    <input type="text" class="coin-code-input" id="ms-username-input" placeholder="e.g. Steve" maxlength="16" oninput="msPreview()">
-    <div style="display:flex;align-items:center;gap:14px;margin:0 0 16px;">
-      <img id="ms-head-preview" src="soul.png" width="44" height="44" style="border:2px solid var(--ink);image-rendering:pixelated;background:var(--paper-dim);object-fit:cover;">
-      <div style="flex:1;min-width:0;">
-        <div class="cos-user-name" id="ms-preview-name">Not signed in</div>
-        <div class="cos-user-email">Microsoft Account</div>
-      </div>
+    <h3><i class="fa-solid fa-cube" style="margin-right:6px;"></i> Login with Minecraft</h3>
+    <p class="coin-modal-desc">Verified identity only &mdash; usernames are never typed manually. Pick the easiest way:</p>
+    <div class="coin-modal-actions">
+      <button class="btn-ok" onclick="showMcLinkModal()" style="width:100%;justify-content:center;"><i class="fa-solid fa-link"></i> Link with Soul Launcher (easiest)</button>
     </div>
+    <p class="coin-modal-desc" style="font-size:11px;margin:0 0 10px;">Open the launcher &rarr; account menu &rarr; <b>&ldquo;Link to Website&rdquo;</b> &rarr; enter the 6-character code here. Verifies the same Microsoft login the launcher uses.</p>
     <div class="coin-modal-actions">
       <button class="btn-ghost" onclick="closeCoinModal('ms-modal')">Cancel</button>
-      <button class="btn-ok" onclick="confirmMsUsername()"><i class="fa-solid fa-right-to-bracket"></i> Login</button>
+      <button class="btn-ok" onclick="startMsOauthLogin()"><i class="fa-brands fa-microsoft"></i> Continue to Microsoft</button>
     </div>
+  </div>
+</div>
+
+<!-- Link with Soul Launcher modal (one-time pairing code) -->
+<div class="coin-modal-overlay" id="mc-link-modal">
+  <div class="coin-modal" style="max-width:480px;">
+    <h3><i class="fa-solid fa-link" style="margin-right:6px;"></i> Link with Soul Launcher</h3>
+    <p class="coin-modal-desc" style="text-align:left;">1. Open the <b>Soul Launcher</b>.<br>2. Click your account (top right) &rarr; <b>&ldquo;Link to Website&rdquo;</b>.<br>3. Type the 6-character code it shows below within 15 minutes:</p>
+    <input type="text" class="coin-code-input" id="mc-link-code" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;" maxlength="6" style="width:100%;text-align:center;font-family:'JetBrains Mono',monospace;font-size:22px;letter-spacing:8px;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')">
+    <div id="mc-link-status" style="font-size:12px;color:var(--ink-soft);margin:10px 0 0;min-height:16px;text-align:center;"></div>
+    <div class="coin-modal-actions">
+      <button class="btn-ghost" onclick="closeCoinModal('mc-link-modal')">Cancel</button>
+      <button class="btn-ok" onclick="confirmMcLink()"><i class="fa-solid fa-link"></i> Link account</button>
+    </div>
+  </div>
+</div>
+
+<!-- Microsoft OAuth setup helper (shown once when the Azure app client id is not configured) -->
+<div class="coin-modal-overlay" id="ms-setup-modal">
+  <div class="coin-modal" style="max-width:560px;">
+    <h3><i class="fa-solid fa-key" style="margin-right:6px;"></i> One-time setup: Microsoft app</h3>
+    <p class="coin-modal-desc" style="text-align:left;">Real Minecraft login needs a free Microsoft app ID (5&nbsp;minutes, no card needed):</p>
+    <ol style="text-align:left;font-size:13px;line-height:1.7;color:var(--ink-soft);margin:0 0 14px;padding-left:20px;">
+      <li>Open <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener" style="color:var(--bolt);">portal.azure.com → App registrations</a> and click <b>New registration</b>.</li>
+      <li>Name it <b>Soul Web</b>. Under account types pick <b>Personal Microsoft accounts only</b>.</li>
+      <li>Redirect URI: choose platform <b>Single-page application (SPA)</b> and add <b id="ms-setup-redirect">https://soullauncher.vercel.app/</b>.</li>
+      <li>Click Register, then copy the <b>Application (client) ID</b> below.</li>
+    </ol>
+    <input type="text" class="coin-code-input" id="ms-client-id-input" placeholder="Paste your Application (client) ID here" style="width:100%;">
+    <div class="coin-modal-actions">
+      <button class="btn-ghost" onclick="closeCoinModal('ms-setup-modal')">Not now</button>
+      <button class="btn-ok" onclick="saveMsClientId()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Soul Account Login Modal -->
+<div class="coin-modal-overlay" id="soul-login-modal">
+  <div class="coin-modal">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <div style="width:44px;height:44px;border:2px solid var(--ink);background:var(--bolt);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:20px;">S</div>
+      <div>
+        <h3 style="margin:0;font-size:18px;">Soul Account</h3>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;">Sign in with email &amp; password</div>
+      </div>
+    </div>
+    <div id="soul-auth-error" class="auth-error" style="margin-bottom:10px;"></div>
+    <div id="soul-auth-tabs" style="display:flex;gap:8px;margin-bottom:18px;border-bottom:2px solid var(--ink);padding-bottom:8px;">
+      <button id="soul-tab-login" style="flex:1;padding:8px;border:none;border-bottom:3px solid var(--bolt);background:transparent;color:var(--ink);font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;text-transform:uppercase;cursor:pointer;">Sign In</button>
+      <button id="soul-tab-signup" style="flex:1;padding:8px;border:none;border-bottom:3px solid transparent;background:transparent;color:var(--muted);font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;text-transform:uppercase;cursor:pointer;">Create Account</button>
+    </div>
+    <form id="soul-login-form" class="auth-input-group" style="flex-direction:column;gap:10px;margin-bottom:14px;">
+      <input type="email" id="soul-email" placeholder="Email address" required autocomplete="email">
+      <input type="password" id="soul-password" placeholder="Password (6+ chars)" required autocomplete="current-password" minlength="6">
+      <button type="submit" id="soul-login-btn" class="auth-btn" style="width:100%;">
+        <i class="fa-solid fa-right-to-bracket"></i> <span id="soul-login-btn-text">Sign In</span>
+      </button>
+    </form>
+    <div class="soul-hint" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);text-align:center;margin-bottom:14px;">
+      Created an account on the launcher? Use the same email — it works here too.
+    </div>
+    <div class="spam-warning" style="margin-top:14px;">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <div><b>Important:</b> If the verification email doesn't arrive, check your <b>Spam</b>, <b>Junk</b>, or <b>Promotions</b> folder.</div>
+    </div>
+    <div class="coin-modal-actions" style="margin-top:16px;">
+      <button class="btn-ghost" onclick="closeSoulLogin()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Soul Username Setup Modal -->
+<div class="coin-modal-overlay" id="soul-username-modal">
+  <div class="coin-modal">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <div style="width:44px;height:44px;border:2px solid var(--ink);background:var(--bolt);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:20px;">S</div>
+      <div>
+        <h3 style="margin:0;font-size:18px;">Minecraft Username</h3>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;">Choose your Minecraft username for your Soul account</div>
+      </div>
+    </div>
+    <div id="soul-username-error" class="auth-error" style="margin-bottom:10px;"></div>
+    <div id="soul-username-success" style="margin-bottom:10px;padding:10px 14px;background:rgba(34,197,94,0.15);border:2px solid rgba(34,197,94,0.35);color:#86efac;font-family:'JetBrains Mono',monospace;font-size:12px;display:none;border-radius:var(--radius);"></div>
+    <div class="auth-input-group" style="margin-bottom:14px;">
+      <input type="text" id="soul-username-input" placeholder="e.g. Arnav404" required maxlength="16" autocomplete="off">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);">3-16 characters. Letters, numbers, underscores only.</div>
+    </div>
+    <button id="soul-username-save" class="auth-btn" style="width:100%;margin-bottom:10px;">
+      <i class="fa-solid fa-save"></i> <span>Save Username</span>
+    </button>
+    <button class="btn-ghost" style="width:100%;" onclick="closeSoulUsername()">Skip for now</button>
+  </div>
+</div>
+
+<!-- Soul Verify Email Modal -->
+<div class="coin-modal-overlay" id="soul-verify-modal">
+  <div class="coin-modal">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <div style="width:44px;height:44px;border:2px solid var(--ink);background:var(--bolt);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:20px;">S</div>
+      <div>
+        <h3 style="margin:0;font-size:18px;">Verify Email</h3>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;">Verify your email before signing in</div>
+      </div>
+    </div>
+    <div id="soul-verify-error" class="auth-error" style="margin-bottom:10px;"></div>
+    <div id="soul-verify-success" style="margin-bottom:10px;padding:10px 14px;background:rgba(34,197,94,0.15);border:2px solid rgba(34,197,94,0.35);color:#86efac;font-family:'JetBrains Mono',monospace;font-size:12px;display:none;border-radius:var(--radius);"></div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);margin-bottom:14px;text-align:center;">
+      Signed in as <b id="soul-verify-email">—</b>
+    </div>
+    <p style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);margin-bottom:14px;text-align:center;">
+      Check your inbox (and spam folder) for the verification link.
+    </p>
+    <button id="soul-verify-check" class="auth-btn" style="width:100%;margin-bottom:10px;">
+      <i class="fa-solid fa-circle-check"></i> <span>Check Verification</span>
+    </button>
+    <button id="soul-verify-resend" class="auth-btn secondary" style="width:100%;margin-bottom:10px;">
+      <i class="fa-solid fa-envelope"></i> <span>Resend Verification Email</span>
+    </button>
+    <button class="btn-ghost" style="width:100%;" onclick="closeSoulVerify()">Close</button>
   </div>
 </div>
 
@@ -1669,14 +1908,14 @@ footer{
     <div class="section-head">
       <span class="section-tag">Cosmetics</span>
       <h2 class="section-title">Soul Client Cosmetics</h2>
-      <p class="section-desc">Browse capes and cosmetics. Request a purchase and our team sends you a redeem code to unlock it in the client.</p>
+      <p class="section-desc">Browse capes and cosmetics. Purchases are made instantly with <b>Soul Coins</b> — every cosmetic is permanently bound to your verified Microsoft or Soul account ID; offline accounts are locked out.</p>
     </div>
     <div id="cos-login-area" style="max-width:600px;margin:0 auto 48px;">
       <div id="cos-login-form" class="cos-login-box">
         <div class="coin-login-buttons">
           <button class="coin-login-btn" onclick="msLoginFlow()">
             <span class="coin-ms-logo"><span class="sq red"></span><span class="sq green"></span><span class="sq blue"></span><span class="sq yellow"></span></span>
-            <span>Login with Microsoft</span>
+            <span>Login with Minecraft</span>
           </button>
           <div class="coin-login-divider"><span>OR</span></div>
           <button class="coin-login-btn offline" onclick="cosShowOfflineForm()"><i class="fa-solid fa-user-secret"></i> Login Offline</button>
@@ -1715,6 +1954,44 @@ footer{
     </div>
     <div id="cosmetics-store-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;min-height:100px;">
       <div class="ms-empty">Loading cosmetics...</div>
+    </div>
+  </div>
+</section>
+
+<section id="coins-page" class="page-posts">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-tag">Soul Coins</span>
+      <h2 class="section-title">Soul Coin Store</h2>
+      <p class="section-desc">The economy behind Soul Cosmetics, Cape Builder and Shield Builder. Buy Soul Coins through a support ticket (UPI) — the team credits your wallet once payment is confirmed. Every wallet is tied to a verified account ID: <b>Microsoft</b> and <b>Soul</b> accounts are kept completely separate, and <b>offline accounts are locked out</b> for security.</p>
+    </div>
+
+    <div id="coins-login-area" style="max-width:640px;margin:0 auto 42px;"></div>
+
+    <div id="coins-content" style="display:none;">
+      <div id="coins-balance-box" style="max-width:640px;margin:0 auto 30px;display:flex;align-items:center;justify-content:space-between;gap:14px;border:3px solid var(--ink);background:var(--paper-2);padding:20px 24px;">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <img src="soul_coin.png" alt="Soul Coin" style="width:52px;height:52px;object-fit:contain;background:var(--paper);border:2px solid var(--ink);padding:6px;" onerror="this.style.display='none'">
+          <div>
+            <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft);">Your Balance</div>
+            <div id="coins-balance-big" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:30px;color:var(--ink);">—</div>
+          </div>
+        </div>
+        <div id="coins-eco-id" style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-soft);max-width:240px;text-align:right;" title="Coins are permanently bound to this verified account ID"></div>
+      </div>
+
+      <div class="section-head" style="margin-top:8px;">
+        <span class="section-tag">Packages</span>
+        <h2 class="section-title">Buy Soul Coins</h2>
+      </div>
+      <div id="coins-packages" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px;margin-bottom:42px;"></div>
+
+      <div class="section-head" style="margin-top:8px;">
+        <span class="section-tag">Ledger</span>
+        <h2 class="section-title">My Coin Orders</h2>
+        <p class="section-desc" style="margin-top:6px;">Each order is a support ticket — open it to chat with the team, send payment proof or re-check status. <a href="#tickets" onclick="showTicketsPage();return false;" style="color:var(--bolt);text-decoration:underline;font-family:'JetBrains Mono',monospace;font-size:11px;">VIEW ALL TICKETS &rarr;</a></p>
+      </div>
+      <div id="coins-orders" style="display:flex;flex-direction:column;gap:10px;max-width:760px;"></div>
     </div>
   </div>
 </section>
@@ -1770,60 +2047,9 @@ footer{
   </div>
 </div>
 
-<section id="redeem-page" class="page-posts">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="section-tag">Redeem Code</span>
-      <h2 class="section-title">Redeem a Cosmetics Code</h2>
-      <p class="section-desc">Enter the redeem code you received from our team to unlock cosmetics on your account. The item unlocks for the Minecraft username you sign in with.</p>
-    </div>
+<!-- REDEEM PAGE REMOVED — redeem codes are RETIRED.
+     Cosmetics are now purchased with Soul Coins (#coins page) only. -->
 
-    <div id="redeem-login-area" style="max-width:600px;margin:0 auto 48px;">
-      <div id="redeem-login-form" class="cos-login-box">
-        <div class="coin-login-buttons">
-          <button class="coin-login-btn" onclick="msLoginFlow()">
-            <span class="coin-ms-logo"><span class="sq red"></span><span class="sq green"></span><span class="sq blue"></span><span class="sq yellow"></span></span>
-            <span>Login with Microsoft</span>
-          </button>
-          <div class="coin-login-divider"><span>OR</span></div>
-          <button class="coin-login-btn offline" onclick="redeemShowOfflineForm()"><i class="fa-solid fa-user-secret"></i> Login Offline</button>
-        </div>
-        <div id="redeem-offline-group" class="cos-login-field" style="display:none;margin-top:16px;">
-          <label class="cos-login-label">Enter Username (3-16 chars)</label>
-          <input type="text" id="redeem-offline-username" class="coin-offline-input" maxlength="16" placeholder="Enter Username" autocomplete="off">
-          <div style="display:flex;gap:10px;margin-top:10px;">
-            <button class="coin-login-btn" style="padding:11px 16px;flex:1;" onclick="redeemConfirmOfflineLogin()">Confirm</button>
-            <button class="cos-btn-ghost neutral" style="flex:1;justify-content:center;" onclick="redeemHideOfflineForm()">Back</button>
-          </div>
-        </div>
-      </div>
-      <div id="redeem-logged-in" class="cos-user-box" style="display:none;flex-direction:column;align-items:stretch;gap:14px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-          <div class="coin-account-row">
-            <img id="redeem-acc-avatar" src="" alt="Player head" class="coin-account-avatar">
-            <div style="min-width:0;">
-              <div class="cos-user-name" id="redeem-acc-name"></div>
-              <div class="cos-user-email" id="redeem-acc-type"></div>
-            </div>
-            <div class="coin-acc-dropdown" style="margin-left:auto;">
-              <button class="cos-btn-ghost neutral" id="redeem-acc-switch" onclick="redeemToggleAccList(event)"><i class="fa-solid fa-arrows-rotate"></i> Switch</button>
-              <div class="coin-acc-list" id="redeem-acc-list" style="display:none;"></div>
-            </div>
-          </div>
-          <button class="cos-btn-ghost" onclick="coinsLogout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          <div class="cos-login-field">
-            <label class="cos-login-label">Redeem Code</label>
-            <input type="text" id="redeem-code-input" class="coin-offline-input" maxlength="32" placeholder="Enter your code..." autocomplete="off" style="text-transform:uppercase;" onkeydown="if(event.key==='Enter')redeemCode()">
-          </div>
-          <button class="coin-login-btn" onclick="redeemCode()"><i class="fa-solid fa-wand-magic-sparkles"></i> Redeem Code</button>
-          <div id="redeem-status" style="font-size:13px;line-height:1.6;min-height:16px;color:var(--muted);"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
 
 <section id="posts-page" class="page-posts">
   <div class="wrap">
@@ -1917,9 +2143,8 @@ footer{
       <a href="#features" onclick="showMainContent()">Features</a>
       <a href="#download" onclick="showMainContent()">Download</a>
       <a href="#preview" onclick="showMainContent()">Preview</a>
-      <a href="#cosmetics" onclick="showCosmeticsPage();return false;">Cosmetics</a>
+      <a href="#cosmetics" onclick="showCosmeticsPage();return false;">Cosmetics</a><a href="#coins" onclick="showCoinsPage();return false;">Coins</a>
       <a href="#tickets" onclick="showTicketsPage();return false;">Tickets</a>
-      <a href="#posts" onclick="showPostsPage();return false;">Posts</a>
       <a href="#jobs" onclick="showJobsPage();return false;">Jobs</a>
       <a href="#devs" onclick="showMainContent()">Devs</a>
     </div>
@@ -2444,13 +2669,27 @@ footer{
 
   async function resolvePlayerId(username, type) {
     if (type !== 'offline') {
-      try {
-        const res = await fetch(`https://api.ashcon.app/mojang/v2/user/${encodeURIComponent(username)}`);
-        if (res.ok) {
+      // Never invent a UUID for a non-offline account - if the lookup fails we
+      // return null so the wallet stays locked instead of mapping to a fake ID.
+      // Official Mojang endpoint first, ashcon as a secondary fallback.
+      const name = encodeURIComponent(String(username || '').trim());
+      const endpoints = [
+        `https://api.mojang.com/users/profiles/minecraft/${name}`,
+        `https://api.ashcon.app/mojang/v2/user/${name}`
+      ];
+      for (const url of endpoints) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) continue;
           const data = await res.json();
-          if (data && data.uuid) return String(data.uuid).replace(/-/g, '');
-        }
-      } catch (e) {}
+          const uuid = (data && (data.id || (data.data && data.data.id) || data.uuid)) || null;
+          if (uuid && /^[0-9a-f]{32}$/i.test(String(uuid).replace(/-/g, ''))) {
+            return String(uuid).replace(/-/g, '').toLowerCase();
+          }
+          if (data && data.id && !data.uuid) return String(data.id).replace(/-/g, '').toLowerCase();
+        } catch (e) {}
+      }
+      return null;
     }
     return offlineUuid(username);
   }
@@ -2460,7 +2699,21 @@ footer{
   let cosmeticsCatalogData = null;
   // Cosmetics removed by owner request — hidden from store even if GitHub repo still lists them.
   const SOUL_REMOVED_COSMETICS = new Set(['cape-chick', 'cape-new', 'snow-cape']);
-  function soulIsRemovedCosmetic(id) { return !!id && SOUL_REMOVED_COSMETICS.has(String(id).toLowerCase()); }
+  // Bundle capes (Firebase catalog bundled:true) are hidden like removed ones -
+  // they are granted via bundles, never shown as individual store cards.
+  function soulIsBundledCosmetic(id) {
+    try {
+      const data = (typeof cosmeticsCatalogData !== 'undefined' && cosmeticsCatalogData) || {};
+      const item = data[id] || data[String(id).toLowerCase()];
+      if (item && item.bundled === true) return true;
+      const nm = String(id == null ? '' : id).toLowerCase();
+      for (const key of Object.keys(data)) {
+        if (String(key).toLowerCase() === nm && data[key] && data[key].bundled === true) return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+  function soulIsRemovedCosmetic(id) { return (!!id && SOUL_REMOVED_COSMETICS.has(String(id).toLowerCase())) || soulIsBundledCosmetic(id); }
   let cosShow2D = false;
   let cosSearchQuery = '';
   let soulGridGen = 0;
@@ -2503,33 +2756,32 @@ footer{
       return;
     }
     const user = getCoinsUser();
-    const ownedIds = new Set();
-    if (user) {
-      const playerId = await resolvePlayerId(user.name, user.type);
-      if (playerId) {
-        try {
-          const invSnap = await db.ref(`capes/inventory/${playerId}`).once('value');
-          const inv = invSnap.val() || {};
-          (inv.ownedItemIds || []).forEach(id => ownedIds.add(id));
-        } catch (e) {}
-      }
+    // SECURITY: offline accounts are completely locked out of cosmetics.
+    // Ownership is bound to verified account IDs only (see getEcoIdentity).
+    if (user && user.type === 'offline') {
+      grid.innerHTML = `<div class="ms-empty" style="grid-column:1/-1;">Offline accounts have completely restricted access to cosmetics.<br>Sign in with a Microsoft or Soul account — every cosmetic is permanently bound to a verified account ID and can never be shared across accounts.</div>`;
+      return;
     }
+    const eco = await getEcoIdentity();
+    const ownedIds = eco ? await ecoOwnedSet(eco.key) : new Set();
+    if (eco) { ecoWatchBalance(eco.key); }
     grid.innerHTML = entries.map(([id, item]) => {
       const managed0 = (typeof soulGhIsManaged === 'function' && soulGhIsManaged(item));
       const imgSrc = item.icon || item.preview || (managed0 ? soulBlackCapeURL() : (`Capes/${id}.png`));
       const isAnim = item.animated;
-      const isFree = item.free === true;
-      const price = Number(item.price) > 0 ? Number(item.price) : 0;
+      const coinPrice = coinPriceFor(item);
       const isOwned = ownedIds.has(id);
       const safeName = (item.name || id).replace(/'/g, "\\'");
       const safeId = String(id).replace(/'/g, "\\'");
+      const coinImgTag = ecoCoinIcon(12);
       let btnHtml;
-      if (isFree) btnHtml = '<button class="cos-buy-btn owned">FREE</button>';
-      else if (isOwned) btnHtml = '<button class="cos-buy-btn owned">Owned</button>';
-      else btnHtml = `<button class="cos-buy-btn" onclick="event.stopPropagation();requestCosmeticPurchase('${safeId}','${safeName}',${price})">Request Purchase</button>`;
-      const priceTag = isFree
+      if (isOwned) btnHtml = '<button class="cos-buy-btn owned">Owned</button>';
+      else if (coinPrice === 0) btnHtml = `<button class="cos-buy-btn" onclick="event.stopPropagation();buyCosmeticWithCoins('${safeId}','${safeName}',0)">Claim Free</button>`;
+      else if (ecoBalance !== null && ecoBalance < coinPrice) btnHtml = `<button class="cos-buy-btn" onclick="event.stopPropagation();showCoinsPage()">Need ${coinPrice - (ecoBalance || 0)} ${coinImgTag}</button>`;
+      else btnHtml = `<button class="cos-buy-btn" onclick="event.stopPropagation();buyCosmeticWithCoins('${safeId}','${safeName}',${coinPrice})">Buy ${coinPrice} ${coinImgTag}</button>`;
+      const priceTag = coinPrice === 0 && isOwned
         ? '<div class="cos-price free">FREE</div>'
-        : (price > 0 ? `<div class="cos-price">$${price.toFixed(2)}<small>USD</small></div>` : '');
+        : (coinPrice > 0 ? `<div class="cos-price">${coinImgTag} ${coinPrice}<small>SOUL COINS</small></div>` : '<div class="cos-price free">FREE</div>');
       return `
         <div class="cosmetics-card soul-has3d" data-cape-id="${id}" onclick="openSoulCape3D('${safeId}', event)">
           ${isAnim ? '<span class="cos-anim-badge">ANIMATED • LIVE 3D</span>' : '<span class="cos-anim-badge" style="border-color:var(--bolt);color:var(--bolt);">REAL 3D</span>'}
@@ -2638,7 +2890,7 @@ footer{
     if (user) {
       document.getElementById('cos-acc-avatar').src = user.skin || coinsHeadUrl(user.name);
       document.getElementById('cos-acc-name').textContent = user.name;
-      document.getElementById('cos-acc-type').textContent = user.type === 'microsoft' ? 'Microsoft Account' : 'Offline Account';
+      document.getElementById('cos-acc-type').textContent = user.type === 'microsoft' ? (user.verified ? 'Microsoft Account · Verified' : 'Microsoft Account') : 'Offline Account';
     }
     renderCosAccList();
   }
@@ -2699,7 +2951,7 @@ footer{
       };
       updates[`messages/${ticketId}/payinfo`] = {
         sender: 'ADMIN', senderName: autoAdminName, senderAvatar: autoAdminAvatar,
-        text: 'Thanks for your purchase request! Please complete your payment using the instructions in the image below, then our team will send you a redeem code.\n\n**UPI Name:** Aditya Uddas Govekar\n**UPI ID (FAM):** 8317312823\n\nSend the exact amount and reply once done, our team will confirm and send your code.',
+        text: 'Thanks for your purchase request! Please complete your payment using the instructions in the image below, then our team will grant the Souls Coins / cosmetic directly to your account wallet.\n\n**UPI Name:** Aditya Uddas Govekar\n**UPI ID (FAM):** 8317312823\n\nSend the exact amount and reply once done, our team will confirm and credit your account. (Redeem codes are retired.)',
         image: 'https://raw.githubusercontent.com/SoulTeams/soulmc/refs/heads/main/Pay.png',
         timestamp: Date.now() + 1
       };
@@ -2961,32 +3213,575 @@ footer{
     return `https://minotar.net/helm/${encodeURIComponent(name)}/64.png`;
   }
 
-  window.msLoginFlow = () => document.getElementById('ms-modal').classList.add('open');
+  // ================= SOUL COINS ECONOMY (shared with Soul Launcher) =================
+  // Wallets & ownership are keyed by a SECURE ACCOUNT ID, never by username:
+  //   Soul accounts      -> "soul_" + Firebase UID
+  //   Microsoft accounts -> "ms_" + verified Mojang UUID
+  //   Offline accounts   -> NO KEY (store & cosmetics fully locked)
+  // Microsoft and Soul data never share keys, so purchases never cross accounts.
+  function ecoSanKey(p) { return String(p || '').replace(/[.$#\[\]\/]/g, '_'); }
 
-  window.msPreview = () => {
-    const name = document.getElementById('ms-username-input').value.trim();
-    const valid = /^[a-zA-Z0-9_]{3,16}$/.test(name);
-    document.getElementById('ms-preview-name').textContent = name && !valid ? 'Invalid username' : (name || 'Not signed in');
-    document.getElementById('ms-head-preview').src = valid ? coinsHeadUrl(name) : 'soul.png';
-  };
+  async function getEcoIdentity() {
+    const user = getCoinsUser();
+    if (!user) return null;
+    if (user.type === 'soul') {
+      if (user.id) return { key: 'soul_' + ecoSanKey(user.id), type: 'soul', user };
+      return null;
+    }
+    if (user.type === 'microsoft') {
+      // Real OAuth logins carry a stored, verified UUID. Legacy username-based
+      // accounts are resolved online once, then the result is persisted so the
+      // wallet key stays stable even if Mojang/ashcon are unreachable later.
+      try {
+        let uuid = (user.uuid || '').replace(/-/g, '') || null;
+        if (!uuid) {
+          uuid = await resolvePlayerId(user.name, 'microsoft');
+          if (uuid) {
+            // remember the verified UUID on the account record (best effort)
+            try {
+              const accs = getCoinsAccounts();
+              const i = accs.findIndex(act => act.name === user.name && act.type === 'microsoft');
+              if (i >= 0) { accs[i].uuid = uuid; accs[i].verified = true; localStorage.setItem('soul_accounts', JSON.stringify(accs)); }
+              setCurrentCoinsAccount({ ...user, uuid, verified: true });
+            } catch (e) {}
+          }
+        }
+        if (uuid && /^[0-9a-f]{32}$/.test(uuid)) {
+          return { key: 'ms_' + ecoSanKey(uuid), type: 'microsoft', user };
+        }
+      } catch (e) {}
+      return null;
+    }
+    return null; // offline / unknown => locked
+  }
 
-  window.confirmMsUsername = () => {
-    const name = document.getElementById('ms-username-input').value.trim();
-    if (!/^[a-zA-Z0-9_]{3,16}$/.test(name)) {
-      alert('Username must be 3-16 characters (letters, numbers, and underscores only).');
+  const SOUL_COIN_PACKAGES = [
+    { id: 'pack-starter',    name: 'Starter Pouch',  coins: 500,  price: 49 },
+    { id: 'pack-adventurer', name: 'Adventurer Bag', coins: 1200, price: 99,  tag: 'POPULAR' },
+    { id: 'pack-hero',       name: 'Hero Chest',     coins: 3000, price: 199 },
+    { id: 'pack-legend',     name: 'Legend Hoard',   coins: 7500, price: 399, tag: 'BEST VALUE' }
+  ];
+
+  let ecoBalance = null;
+  let ecoWatchedKey = null;
+  let ecoBalWatchRef = null;
+
+  async function ecoReadBalance(key) {
+    if (!key) { ecoBalance = null; return null; }
+    try {
+      const snap = await db.ref(`soul_coins/${key}/balance`).once('value');
+      ecoBalance = Number(snap.val()) || 0;
+    } catch (e) { ecoBalance = null; }
+    return ecoBalance;
+  }
+  function ecoWatchBalance(key) {
+    if (!key || key === ecoWatchedKey) return;
+    try {
+      if (ecoBalWatchRef) ecoBalWatchRef.off('value', ecoBalWatchCb);
+      ecoWatchedKey = key;
+      ecoBalWatchRef = db.ref(`soul_coins/${key}/balance`);
+      ecoBalWatchRef.on('value', ecoBalWatchCb);
+    } catch (e) {}
+  }
+  function ecoBalWatchCb(snap) {
+    const v = snap.val();
+    if (v === null || v === undefined) return;
+    ecoBalance = Number(v) || 0;
+    const el = document.getElementById('coins-balance-big');
+    if (el && document.getElementById('coins-page').classList.contains('active')) el.textContent = ecoBalance.toLocaleString();
+    if (document.getElementById('cosmetics-page').classList.contains('active')) renderCosmeticsGrid();
+  }
+
+  async function ecoSpend(key, amount, meta) {
+    const amt = Math.floor(Number(amount));
+    if (!(amt >= 0)) throw new Error('Invalid amount');
+    let ok = true;
+    await db.ref(`soul_coins/${key}/balance`).transaction(cur => {
+      const current = Number(cur) || 0;
+      if (current < amt) { ok = false; return current; }
+      return current - amt;
+    });
+    if (!ok) throw new Error('INSUFFICIENT');
+    await db.ref(`soul_coins/${key}`).update({ updatedAt: Date.now() }).catch(() => {});
+    push(db.ref(`coins_log/${key}`), { type: meta && meta.type || 'spend', amount: amt, at: Date.now(), ...(meta || {}) }).catch(() => {});
+    return ecoReadBalance(key);
+  }
+  function push(refObj, val) { return refObj.push().set(val); }
+
+  async function ecoGrantCosmetic(key, itemId, source) {
+    const invListRef = db.ref(`capes/inventory/${key}/ownedItemIds`);
+    await invListRef.transaction(list => {
+      const arr = Array.isArray(list) ? list : Object.keys(list || {});
+      if (arr.includes(itemId)) return arr;
+      arr.push(itemId);
+      return arr;
+    });
+    push(db.ref(`capes/inventory_log/${key}`), { action: source, itemId, by: key, at: Date.now() }).catch(() => {});
+  }
+  async function ecoOwnedSet(key) {
+    const owned = new Set();
+    if (!key) return owned;
+    try {
+      const snap = await db.ref(`capes/inventory/${key}/ownedItemIds`).once('value');
+      const val = snap.val();
+      if (Array.isArray(val)) val.forEach(i => owned.add(i));
+      else if (val && typeof val === 'object') Object.keys(val).forEach(i => owned.add(i));
+    } catch (e) {}
+    if (key && key.startsWith('ms_')) {
+      const legacyUuid = key.slice(3).replace(/_/g, '');
+      try {
+        const snap2 = await db.ref(`capes/inventory/${legacyUuid}/ownedItemIds`).once('value');
+        const val2 = snap2.val();
+        if (Array.isArray(val2)) val2.forEach(i => owned.add(i));
+        else if (val2 && typeof val2 === 'object') Object.keys(val2).forEach(i => owned.add(i));
+      } catch (e) {}
+    }
+    return owned;
+  }
+
+  function ecoCoinIcon(size) {
+    return `<img src="soul_coin.png" alt="" style="width:${size}px;height:${size}px;object-fit:contain;vertical-align:-3px;" onerror="this.style.display='none'">`;
+  }
+
+  function coinPriceFor(item) {
+    if (!item) return 0;
+    if (item.free === true) return 0;
+    if (item.coins !== undefined && item.coins !== null && Number(item.coins) >= 0) return Math.floor(Number(item.coins));
+    return Math.max(0, Math.round(Number(item.price) || 0));
+  }
+
+  // --- Buy a cosmetic instantly with Soul Coins (ownership is written to THIS account key only) ---
+  window.buyCosmeticWithCoins = async (itemId, itemName, price) => {
+    const eco = await getEcoIdentity();
+    if (!eco) { alert('Cosmetics are tied to verified accounts. Sign in with a Microsoft account here, or a Soul account. Offline accounts are locked out for security.'); return; }
+    if (price > 0 && ecoBalance !== null && ecoBalance < price) {
+      alert(`Not enough Soul Coins. You need ${price} but have ${(ecoBalance || 0)}. Open the Coins tab to top up.`);
+      showCoinsPage();
       return;
     }
-    const account = {
-      id: 'ms-' + Math.random().toString(36).substr(2, 9),
+    if (!confirm(`Buy "${itemName}" for ${price} ${ecoCoinIcon(13)} Soul Coins?\n\nIt will be permanently owned by ${eco.key} (` + eco.type + ' account).')) return;
+    try {
+      if (price > 0) {
+        await ecoSpend(eco.key, price, { type: 'purchase', itemId, itemName });
+      }
+      await ecoGrantCosmetic(eco.key, itemId, price > 0 ? 'coin-purchase' : 'free-claim');
+      try {
+        const recRef = db.ref('cosmetics_purchases').push();
+        await recRef.set({ accountKey: eco.key, accountType: eco.type, username: eco.user.name, itemId, itemName, price, at: Date.now() });
+      } catch (e) {}
+      if (window.soulToast && typeof window.soulToast.show === 'function') window.soulToast.show('success', 'Cosmetic Purchased', `"${itemName}" is now permanently owned by ${eco.key}.`);
+      else alert(`"${itemName}" purchased! Permanently owned by ${eco.key}.`);
+    } catch (err) {
+      if ((err && err.message) === 'INSUFFICIENT') {
+        alert('Not enough Soul Coins — your balance changed. Opening the Coins page so you can top up.');
+        await ecoReadBalance(eco.key);
+        showCoinsPage();
+      } else {
+        console.error('buyCosmeticWithCoins failed:', err);
+        alert('Could not complete the purchase. ' + (err && err.message ? err.message : err));
+      }
+    }
+    renderCosmeticsGrid();
+  };
+
+  // --- Create a Soul Coins order via the ticket system (same flow as cosmetics orders) ---
+  async function ecoCreateCoinOrder(pkg) {
+    let adminName = 'Soul Team', adminAvatar = '';
+    try {
+      const [ns, av] = await Promise.all([
+        db.ref('admin_settings/name').once('value'),
+        db.ref('admin_settings/avatar').once('value')
+      ]);
+      if (ns.val()) adminName = String(ns.val());
+      if (av.val()) adminAvatar = String(av.val());
+    } catch (e) {}
+    const eco = await getEcoIdentity();
+    if (!eco) throw new Error('LOCKED');
+    const orderRef = db.ref('coin_orders').push();
+    const orderId = orderRef.key;
+    const username = eco.user.name;
+    const updates = {};
+    updates[`coin_orders/${orderId}`] = {
+      id: orderId, packageId: pkg.id, packageName: pkg.name,
+      coins: pkg.coins, price: pkg.price, currency: 'INR',
+      accountKey: eco.key, accountType: eco.type, username,
+      status: 'pending', createdAt: Date.now()
+    };
+    updates[`support_tickets/${orderId}`] = {
+      id: orderId, name: `${username} (Soul Coins: ${pkg.coins})`,
+      lastMessage: `Soul Coins order for ${pkg.coins} coins by ${username}`,
+      timestamp: Date.now(), unread: true,
+      lastAdminName: adminName, lastAdminAvatar: adminAvatar || '', assignedAdmin: adminName
+    };
+    updates[`messages/${orderId}/init`] = {
+      sender: 'USER', senderName: username,
+      text: `Hi! I'd like to buy the **${pkg.name}** package — ${pkg.coins.toLocaleString()} Soul Coins for ₹${pkg.price}. Ledger ID: ${eco.key}`,
+      timestamp: Date.now()
+    };
+    updates[`messages/${orderId}/payinfo`] = {
+      sender: 'ADMIN', senderName: adminName, senderAvatar: adminAvatar,
+      text: 'Thanks for your Soul Coins order! Please complete the payment using the instructions in the image below, then our team will credit your coins.\n\n**UPI Name:** Aditya Uddas Govekar\n**UPI ID (FAM):** 8317312823\n\nSend the exact amount and reply once done — your Soul Coins will be credited to ledger ID **' + eco.key + '**.',
+      image: 'https://raw.githubusercontent.com/SoulTeams/soulmc/refs/heads/main/Pay.png',
+      timestamp: Date.now() + 1
+    };
+    await db.ref().update(updates);
+    try { saveTicketLocally(orderId, username, `${pkg.coins} Soul Coins`); } catch (e) {}
+    return orderId;
+  }
+
+  async function ecoLoadCoinOrders(key) {
+    const out = [];
+    if (!key) return out;
+    try {
+      const snap = await db.ref('coin_orders').once('value');
+      const val = snap.val() || {};
+      Object.entries(val).forEach(([k, o]) => { if (o && o.accountKey === key) out.push({ ...o }); });
+      out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    } catch (e) {}
+    return out;
+  }
+
+  // ---------------- COINS PAGE ----------------
+  window.showCoinsPage = function showCoinsPage() {
+    document.querySelectorAll('section:not(.page-posts), .jagged, header.hero, footer, .countdown-banner, .support-fab').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.page-posts').forEach(p => p.classList.remove('active'));
+    document.getElementById('coins-page').classList.add('active');
+    window.scrollTo({top:0,behavior:'smooth'});
+    setTabHash('coins');
+    try { closeMobileNav(); } catch (e) {}
+    document.getElementById('hamburger').classList.remove('open');
+    document.getElementById('mobile-nav').classList.remove('open');
+    document.body.style.overflow = '';
+    renderCoinsPage();
+  };
+
+  async function renderCoinsPage() {
+    const loginArea = document.getElementById('coins-login-area');
+    const content = document.getElementById('coins-content');
+    const user = getCoinsUser();
+    const eco = user ? await getEcoIdentity() : null;
+
+    if (!user) {
+      loginArea.style.display = '';
+      content.style.display = 'none';
+      loginArea.innerHTML = `
+        <div class="cos-login-box">
+          <div class="coin-login-buttons">
+            <button class="coin-login-btn" onclick="msLoginFlow()">
+              <span class="coin-ms-logo"><span class="sq red"></span><span class="sq green"></span><span class="sq blue"></span><span class="sq yellow"></span></span>
+              <span>Login with Minecraft</span>
+            </button>
+            <div class="coin-login-divider"><span>OR</span></div>
+            <button class="coin-login-btn" onclick="showSoulLogin()"><i class="fa-solid fa-bolt"></i> Login with Soul Account</button>
+          </div>
+          <div style="text-align:center;font-size:11px;color:var(--ink-soft);margin-top:14px;">Offline accounts cannot use Soul Coins or cosmetics — purchases are permanently bound to verified account IDs only.</div>
+        </div>`;
+      return;
+    }
+    if (!eco) {
+      loginArea.style.display = '';
+      content.style.display = 'none';
+      const offline = user.type === 'offline';
+      loginArea.innerHTML = `
+        <div class="cos-login-box" style="border-color:#ef4444;">
+          <div style="font-weight:800;">${offline ? 'Offline Account — Soul Coins Locked' : 'Account Not Verified'}</div>
+          <div style="font-size:12px;color:var(--ink-soft);margin-top:8px;line-height:1.6;">${offline
+            ? 'For security, offline accounts have completely restricted access to Soul Coins and cosmetics. Sign in with a Microsoft or Soul account — every wallet is tied to a verified account ID that can never be shared or transferred.'
+            : 'We could not verify this account\u2019s identity. Please use a Microsoft or Soul account to access Soul Coins.'}</div>
+        </div>`;
+      return;
+    }
+
+    loginArea.style.display = 'none';
+    content.style.display = '';
+    const balEl = document.getElementById('coins-balance-big');
+    balEl.textContent = ecoBalance === null ? '—' : ecoBalance.toLocaleString();
+    document.getElementById('coins-eco-id').textContent = 'Ledger ID: ' + eco.key;
+
+    // packages
+    const pkgGrid = document.getElementById('coins-packages');
+    pkgGrid.innerHTML = SOUL_COIN_PACKAGES.map((p, i) => `
+      <div style="position:relative;border:3px solid var(--ink);background:var(--paper-2);padding:20px 18px;display:flex;flex-direction:column;align-items:center;gap:6px;">
+        ${p.tag ? `<span style="position:absolute;top:-11px;font-size:10px;font-weight:800;letter-spacing:0.08em;background:${p.tag==='BEST VALUE'?'var(--ink)':'var(--bolt)'};color:var(--paper);padding:3px 10px;">${p.tag}</span>` : ''}
+        <img src="soul_coin.png" alt="" onerror="this.style.display='none'" style="width:58px;height:58px;object-fit:contain;display:block;margin:2px auto 0;">
+        <div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:22px;">${p.coins.toLocaleString()}</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft);">${p.name}</div>
+        <div style="font-weight:800;font-size:18px;">₹${p.price}</div>
+        <button class="coin-buy-btn" data-pkg="${i}" onclick="event.stopPropagation();coinsBuyPackage(${i})">Buy via Ticket</button>
+      </div>`).join('');
+    pkgGrid.querySelectorAll('[data-pkg]').forEach(btn => btn.onclick = (e) => coinsBuyPackage(Number(btn.dataset.pkg)));
+
+    // orders
+    const ordersEl = document.getElementById('coins-orders');
+    ordersEl.innerHTML = '<div class="ms-empty">Loading orders...</div>';
+    const orders = await ecoLoadCoinOrders(eco.key);
+    if (!orders.length) {
+      ordersEl.innerHTML = '<div class="ms-empty">No Soul Coin orders yet. Buy a package above — the team confirms payment in the ticket chat.</div>';
+      return;
+    }
+    ordersEl.innerHTML = orders.map(o => {
+      const color = o.status === 'paid' ? '#22c55e' : o.status === 'cancelled' ? '#ef4444' : '#f59e0b';
+      const safeId = String(o.id || '').replace(/'/g, "\\'");
+      return `<div style="display:flex;align-items:center;gap:14px;border:2px solid var(--ink);background:var(--paper-2);padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:12px;flex-wrap:wrap;">
+        <span style="opacity:.55;">#${String(o.id || '').slice(0, 8).toUpperCase()}</span>
+        <span>${ecoCoinIcon(14)} ${(Number(o.coins) || 0).toLocaleString()}</span>
+        <span>₹${o.price}</span>
+        <span style="color:${color};font-weight:700;">${String(o.status || 'PENDING').toUpperCase()}</span>
+        <span style="opacity:.45;">${o.createdAt ? new Date(o.createdAt).toLocaleDateString() : ''}</span>
+        <button class="coin-buy-btn" style="width:auto;padding:9px 16px;margin:0 0 0 auto;font-size:10px;" onclick="coinsOpenTicket('${safeId}')">Open Ticket</button>
+      </div>`;
+    }).join('');
+  }
+
+  // Open the support-ticket chat for a Soul Coin order (so users can check/track it)
+  window.coinsOpenTicket = async (orderId) => {
+    const user = getCoinsUser();
+    try { showTicketsPage(); loadUserTickets(); } catch (e) {}
+    try { openChat(orderId, user ? user.name : '', 'Soul Coins Order'); } catch (e) {}
+  };
+
+  window.coinsBuyPackage = async (i) => {
+    const pkg = SOUL_COIN_PACKAGES[i];
+    const eco = await getEcoIdentity();
+    if (!pkg || !eco) return;
+    if (!confirm(`Create a Soul Coins order for ${pkg.coins.toLocaleString()} coins (₹${pkg.price})?\n\nA support ticket will open with UPI payment details. Coins are credited after the team confirms payment.`)) return;
+    try {
+      const id = await ecoCreateCoinOrder(pkg);
+      if (window.soulToast && typeof window.soulToast.show === 'function') window.soulToast.show('info', 'Order Created', 'Complete the UPI payment in the ticket to receive your coins.');
+      else alert(`Order created! Complete the UPI payment in the ticket to receive ${pkg.coins.toLocaleString()} coins.`);
+      try { showTicketsPage(); loadUserTickets(); openChat(id, eco.user.name, 'Soul Coins Purchase'); } catch (e) {}
+      renderCoinsPage();
+    } catch (err) {
+      console.error('coin order failed:', err);
+      alert('Could not create the order. ' + (err && err.message ? err.message : err));
+    }
+  };
+
+  window.msLoginFlow = () => document.getElementById('ms-modal').classList.add('open');
+
+  // ================= MICROSOFT / MINECRAFT LOGIN (real OAuth) =================
+  // Flow: Microsoft OAuth (SPA + PKCE) -> access token -> serverless relay
+  // (/api/mc-auth) -> Xbox Live -> XSTS -> Minecraft profile = verified UUID.
+  // No Microsoft/Minecraft tokens are stored on the site; only the verified
+  // profile (name + UUID) is saved, which maps the wallet to "ms_" + UUID —
+  //   exactly the same secure key family the Soul Launcher uses.
+  function msClientId() {
+    return (window.SOUL_MS_CLIENT_ID || localStorage.getItem('soul_ms_client_id') || '').trim();
+  }
+  function msB64url(buf) {
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(buf)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function msPkce() {
+    const raw = new Uint8Array(32); crypto.getRandomValues(raw);
+    const verifier = msB64url(raw.buffer);
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+    return { verifier, challenge: msB64url(digest) };
+  }
+  let _msAuthWindow = null;
+  window.startMsOauthLogin = async () => {
+    if (location.protocol === 'file:') {
+      return alert('Real Minecraft login must run from the live site (Vercel) or a local web server - not by double-clicking index.html. Open https://soullauncher.vercel.app or http://127.0.0.1:<port>/ and register that exact address as a redirect URI.');
+    }
+    if (!msClientId()) {
+      document.getElementById('ms-setup-redirect').textContent = location.origin + location.pathname;
+      document.getElementById('ms-modal').classList.remove('open');
+      document.getElementById('ms-setup-modal').classList.add('open');
+      return;
+    }
+    const { verifier, challenge } = await msPkce();
+    const state = msB64url(crypto.getRandomValues(new Uint8Array(16)).buffer);
+    sessionStorage.setItem('soul_ms_pkce', JSON.stringify({ verifier, state }));
+    const params = new URLSearchParams({
+      client_id: msClientId(),
+      response_type: 'code',
+      redirect_uri: msRedirectUri(),
+      response_mode: 'fragment',
+      scope: 'XboxLive.signin offline_access openid profile email',
+      state,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      prompt: 'select_account'
+    });
+    const url = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?' + params.toString();
+    document.getElementById('ms-modal').classList.remove('open');
+    _msAuthWindow = window.open(url, 'soul_ms_login', 'width=520,height=720,menubar=no,toolbar=no');
+    if (!_msAuthWindow) {
+      // popup blocked -> navigate this tab instead; the return handler picks the code up on load
+      location.href = url;
+    }
+  };
+
+  // The exact address where this page runs. Register this SAME string as the
+  // SPA redirect URI in Azure (https://soullauncher.vercel.app/ in production,
+  // or e.g. http://127.0.0.1:8791/Soul-Web/index.html for local testing).
+  function msRedirectUri() {
+    return location.origin + location.pathname;
+  }
+
+  window.saveMsClientId = () => {
+    const val = (document.getElementById('ms-client-id-input').value || '').trim();
+    if (!/^[0-9a-fA-F-]{32,36}$/.test(val)) return alert('That does not look like a valid Application (client) ID (a GUID).');
+    localStorage.setItem('soul_ms_client_id', val);
+    document.getElementById('ms-setup-modal').classList.remove('open');
+    alert('Microsoft app ID saved. You can now log in with Minecraft.');
+    startMsOauthLogin();
+  };
+
+  window.msHandleAuthResult = async (data) => {
+    const pkceRaw = sessionStorage.getItem('soul_ms_pkce');
+    sessionStorage.removeItem('soul_ms_pkce');
+    if (!pkceRaw) return; // not started by us (stale page)
+    const pkce = JSON.parse(pkceRaw);
+    if (data.error) {
+      return alert('Microsoft login cancelled or failed' + (data.errorDescription ? ':\n' + data.errorDescription : '.'));
+    }
+    if (!data.code || data.state !== pkce.state) return alert('Microsoft login failed (state mismatch). Please try again.');
+    try {
+      const body = new URLSearchParams({
+        client_id: msClientId(),
+        grant_type: 'authorization_code',
+        code: data.code,
+        redirect_uri: msRedirectUri(),
+        code_verifier: pkce.verifier,
+        scope: 'XboxLive.signin offline_access openid profile email'
+      });
+      const tokRes = await fetch('https://login.microsoftonline.com/consumers/oauth2/v2.0/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      });
+      const tok = await tokRes.json();
+      if (!tokRes.ok || !tok.access_token) {
+        console.warn('[MC login] token exchange failed', tokRes.status, tok);
+        if ((tok.error_description || '').includes('9002326') || (tok.error_description || '').includes('CORS')) {
+          return alert('Microsoft rejected the token exchange because this app is not registered as a Single-page application yet.\n\nIn Azure: App registration ' + '> Authentication > add a redirect URI under platform "Single-page application (SPA)", then retry.');
+        }
+        return alert('Microsoft token exchange failed:\n' + (tok.error_description || tok.error || tokRes.status));
+      }
+      const relayRes = await fetch('/api/mc-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: tok.access_token })
+      });
+      const prof = await relayRes.json().catch(() => ({}));
+      if (!relayRes.ok || prof.error) {
+        const E = prof && prof.errorCode ? String(prof.errorCode) : '';
+        if (E === '2148916233') return alert('This Microsoft account does not own Minecraft (Java Edition). Buy/own Minecraft first, then log in.');
+        if (E === '2148916235') return alert('Minecraft services are not available in your region right now. Try again later.');
+        if (E === '2148916238') return alert('This is a child Microsoft account - adult accounts only for this login.');
+        return alert('Minecraft identity check failed:\n' + (prof.error || relayRes.status));
+      }
+      const account = {
+        id: 'ms-' + String(prof.uuid).replace(/-/g, ''),
+        name: prof.name,
+        type: 'microsoft',
+        verified: true,
+        uuid: String(prof.uuid).replace(/-/g, ''),
+        skin: coinsHeadUrl(prof.name)
+      };
+      saveCoinsAccount(account);
+      updateCoinsLoginUI();
+      closeCoinModal && closeCoinModal('ms-modal');
+      alert(`Welcome ${prof.name}! Your Minecraft identity is verified and your Soul Coins wallet is linked.`);
+    } catch (e) {
+      console.warn('[MC login] failed', e);
+      alert('Minecraft login failed: ' + (e && e.message ? e.message : e));
+    }
+  };
+
+  window.addEventListener('message', (ev) => {
+    if (ev.origin !== location.origin) return;
+    if (_msAuthWindow && ev.source !== _msAuthWindow) return;
+    if (!ev.data || ev.data.source !== 'soul-ms-login') return;
+    msHandleAuthResult(ev.data);
+  });
+
+  // Pick up a returned code when this page itself navigated (popup-blocked fallback)
+  (function msBootCheck() {
+    const raw = sessionStorage.getItem('soul_ms_oauth_return');
+    if (!raw) return;
+    sessionStorage.removeItem('soul_ms_oauth_return');
+    try { const ret = JSON.parse(raw); if (ret && (ret.code || ret.error)) setTimeout(() => msHandleAuthResult(ret), 300); } catch (e) {}
+  })();
+
+  // ================= LINK WITH SOUL LAUNCHER (pairing-code sign-in) =================
+  // The launcher publishes its VERIFIED Microsoft identity to
+  // mc_link/<code> for 15 minutes. The website claims the node,
+  // deletes it, and builds the same ms_<uuid> wallet identity —
+  // identical trust level to the in-game launcher session.
+  window.showMcLinkModal = () => {
+    document.getElementById('mc-link-code').value = '';
+    document.getElementById('mc-link-status').textContent = '';
+    document.getElementById('ms-modal').classList.remove('open');
+    document.getElementById('mc-link-modal').classList.add('open');
+    setTimeout(() => { const el = document.getElementById('mc-link-code'); if (el) el.focus(); }, 100);
+  };
+
+  window.confirmMcLink = async () => {
+    if (window._mcLinkBusy) return;
+    // Treat a "not found" code as harmless: a double-click just consumed it.
+    if (window._mcLinkClaimedCode && window._mcLinkClaimedCode === (document.getElementById('mc-link-code').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')) {
+      document.getElementById('mc-link-status').textContent = 'Already linked! ✔ (' + window._mcLinkClaimedName + ')';
+      return;
+    }
+    window._mcLinkBusy = true;
+    const input = document.getElementById('mc-link-code');
+    const status = document.getElementById('mc-link-status');
+    try {
+    const code = (input && input.value ? input.value : '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!/^[A-Z0-9]{6}$/.test(code)) {
+      status.textContent = 'Enter the 6-character code exactly as shown in the launcher.';
+      return;
+    }
+    const setMsg = (t, ok) => { status.textContent = t; status.style.color = ok ? '#22c55e' : ''; };
+    setMsg('Matching the code with the launcher…');
+    let data = null;
+    try {
+      const res = await fetch(`https://soul-backend-default-rtdb.firebaseio.com/mc_link/${code}.json`);
+      data = await res.json();
+    } catch (e) {
+      setMsg('Could not reach the database - check your connection and try again.');
+      return;
+    }
+    if (!data || data.status !== 'pending') {
+      setMsg(window._mcLinkClaimedCode === code
+        ? 'Already linked! ✔ (' + window._mcLinkClaimedName + ')'
+        : 'Code not found — it may have already been linked. Check your account chip above.');
+      return;
+    }
+    const uuid = String((data.uuid || '')).trim().toLowerCase();
+    const name = String((data.name || '')).trim();
+    if (!/^[0-9a-f]{32}$/.test(uuid) || !name) {
+      setMsg('The launcher offered an invalid identity. Update the launcher and try again.');
+      return;
+    }
+    const age = Date.now() - Number(data.createdAt || 0);
+    if (age > 15 * 60 * 1000) {
+      setMsg('That code expired. Click "Link to Website" in the launcher for a new one.');
+      return;
+    }
+    // Claim: delete first (atomic-ish), so the code can never be reused.
+    window._mcLinkClaimedCode = code;
+    window._mcLinkClaimedName = name;
+    fetch(`https://soul-backend-default-rtdb.firebaseio.com/mc_link/${code}.json`, { method: 'DELETE' }).catch(() => {});
+    saveCoinsAccount({
+      id: 'ms-' + uuid,
       name,
       type: 'microsoft',
+      verified: true,
+      uuid,
       skin: coinsHeadUrl(name)
-    };
-    saveCoinsAccount(account);
-    document.getElementById('ms-username-input').value = '';
-    closeCoinModal('ms-modal');
-    updateCoinsLoginUI();
-    alert(`Logged in as ${name} (Microsoft account).`);
+    });
+    setMsg(`Linked ${name} successfully!`, true);
+    setTimeout(() => {
+      document.getElementById('mc-link-modal').classList.remove('open');
+      updateCoinsLoginUI();
+      alert(`Welcome ${name}! Your Minecraft identity from the Soul Launcher is verified and your Soul Coins wallet is linked.`);
+    }, 500);
+    } finally {
+      window._mcLinkBusy = false;
+    }
   };
 
   window.switchCoinsAccount = (name, type) => {
@@ -3020,7 +3815,7 @@ footer{
       <div class="coin-acc-item" onclick="switchCoinsAccount('${a.name.replace(/'/g, "\\'")}','${a.type}')" style="${active ? 'background:var(--bolt);' : ''}">
         <img src="${a.skin || `https://minotar.net/helm/${encodeURIComponent(a.name)}/64.png`}" alt="" onerror="this.src='soul.png'">
         <span class="acc-name">${a.name}${active ? ' ✓' : ''}</span>
-        <span class="acc-type">${a.type === 'microsoft' ? 'Microsoft' : 'Offline'}</span>
+        <span class="acc-type">${a.type === 'microsoft' ? 'Microsoft' : a.type === 'offline' ? 'Offline' : 'Soul'}</span>
         <button class="acc-remove" title="Remove account" onclick="removeCoinsAccount('${a.name.replace(/'/g, "\\'")}','${a.type}',event)"><i class="fa-solid fa-trash-can"></i></button>
       </div>`;
   }
@@ -3058,7 +3853,7 @@ footer{
     if (rdLogged) rdLogged.style.display = loggedIn ? '' : 'none';
     if (user) {
       const skin = user.skin || `https://minotar.net/helm/${encodeURIComponent(user.name)}/64.png`;
-      const accType = user.type === 'microsoft' ? 'Microsoft Account' : 'Offline Account';
+      const accType = user.type === 'microsoft' ? (user.verified ? 'Microsoft Account · Verified' : 'Microsoft Account') : 'Offline Account';
       const cosAvatar = document.getElementById('cos-acc-avatar'); if (cosAvatar) cosAvatar.src = skin;
       const cosName = document.getElementById('cos-acc-name'); if (cosName) cosName.textContent = user.name;
       const cosType = document.getElementById('cos-acc-type'); if (cosType) cosType.textContent = accType;
@@ -3068,6 +3863,8 @@ footer{
     }
     renderCosAccList();
     renderRedeemAccList();
+    // keep the header chip in sync with the active store account
+    try { if (typeof updateSoulAuthUI === 'function') updateSoulAuthUI(); } catch (e) {}
     // tickets now on separate #tickets tab — keep badge live
     if (loggedIn) loadUserTickets(); else setTicketsBadges(0);
   }
@@ -3105,71 +3902,22 @@ footer{
 
   window.closeCoinModal = (id) => document.getElementById(id).classList.remove('open');
 
+  // Redeem codes RETIRED — cosmetics are purchased with Soul Coins on the
+  // #coins page only. Anything hitting the old redeem entry points is
+  // redirected to the store.
   function showRedeemPage() {
-    document.querySelectorAll('section:not(.page-posts), .jagged, header.hero, footer, .countdown-banner, .support-fab').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.page-posts').forEach(p => p.classList.remove('active'));
-    document.getElementById('redeem-page').classList.add('active');
-    window.scrollTo({top:0,behavior:'smooth'});
-    updateCoinsLoginUI();
-    setTabHash('redeem');
+    try {
+      window.soulToast && soulToast.show && soulToast.show('info', 'Codes Retired', 'Redeem codes are no longer used — cosmetics are bought with Soul Coins in the store.');
+    } catch (_) {}
+    showCoinsPage();
   }
   window.showRedeemPage = showRedeemPage;
 
   window.redeemCode = async () => {
-    const statusEl = document.getElementById('redeem-status');
-    const user = getCoinsUser();
-    if (!user) { statusEl.innerHTML = '<span style="color:#ef4444;">Log in first with your Microsoft or offline account.</span>'; return; }
-    const raw = (document.getElementById('redeem-code-input').value || '').trim().toUpperCase();
-    if (!raw) { statusEl.innerHTML = '<span style="color:#ef4444;">Enter a code first.</span>'; return; }
     try {
-      const playerId = await resolvePlayerId(user.name, user.type);
-      if (!playerId) { statusEl.innerHTML = '<span style="color:#ef4444;">Could not resolve your Minecraft UUID.</span>'; return; }
-      const snap = await db.ref('capes/codes').once('value');
-      const codes = snap.val() || {};
-      let codeKey = null;
-      let code = null;
-      for (const [k, c] of Object.entries(codes)) {
-        if (c && String(c.code || '').trim().toUpperCase() === raw) { codeKey = k; code = c; break; }
-      }
-      if (!code) {
-        statusEl.innerHTML = `<span style="color:#ef4444;">Code "<b>${raw}</b>" was not found. Check the code and try again.</span>`;
-        return;
-      }
-      if (code.redeemedBy) {
-        statusEl.innerHTML = '<span style="color:#ef4444;">That code was already redeemed by another player.</span>';
-        return;
-      }
-      const expiresAt = Number(code.expiresAt || code.expires || 0);
-      if (expiresAt > 0 && expiresAt < Date.now()) {
-        statusEl.innerHTML = '<span style="color:#ef4444;">This code has expired.</span>';
-        return;
-      }
-      const itemId = code.itemId || code.item || code.capeId;
-      if (!itemId) {
-        statusEl.innerHTML = '<span style="color:#ef4444;">This code is invalid (no item attached).</span>';
-        return;
-      }
-      const invRef = db.ref('capes/inventory/' + playerId);
-      const invSnap = await invRef.once('value');
-      const inv = invSnap.val() || {};
-      if (!inv.ownedItemIds) inv.ownedItemIds = [];
-      if (!inv.equipped) inv.equipped = {};
-      if (!inv.ownedItemIds.includes(itemId)) inv.ownedItemIds.push(itemId);
-      const updates = {};
-      updates[`capes/codes/${codeKey}/redeemedBy`] = playerId;
-      updates[`capes/codes/${codeKey}/redeemedAt`] = Date.now();
-      updates[`capes/inventory/${playerId}`] = inv;
-      updates[`capes/inventory_log/${playerId}/${codeKey}`] = {
-        action: 'redeem', itemId, by: user.name, source: 'website', at: Date.now()
-      };
-      await db.ref().update(updates);
-      document.getElementById('redeem-code-input').value = '';
-      statusEl.innerHTML = `<span style="color:#22c55e;"><b>Success!</b> "<b>${itemId}</b>" unlocked on <b>${user.name}</b>. You can now use it in the client.</span>`;
-      loadCosmeticsStore();
-    } catch (err) {
-      console.error('redeemCode failed:', err);
-      statusEl.innerHTML = '<span style="color:#ef4444;">Could not redeem the code. Check the browser console for details.</span>';
-    }
+      window.soulToast && soulToast.show && soulToast.show('info', 'Codes Retired', 'Redeem codes are no longer used — cosmetics are bought with Soul Coins in the store.');
+    } catch (_) {}
+    showCoinsPage();
   };
 
   function showCosmeticsPage() {
@@ -3219,7 +3967,7 @@ footer{
     document.getElementById('mobile-nav').classList.remove('open');
     document.body.style.overflow = '';
     const h = (location.hash || '').replace(/^#/, '');
-    if (['posts','jobs','cosmetics','tickets','redeem','home','post/'].some(x => h === x || h.indexOf('post/') === 0)) setTabHash('home');
+    if (['posts','jobs','cosmetics','coins','tickets','redeem','home','post/'].some(x => h === x || h.indexOf('post/') === 0)) setTabHash('home');
   }
   function showPostsPage() {
     document.querySelectorAll('section:not(.page-posts), .jagged, header.hero, footer, .countdown-banner, .support-fab').forEach(el => el.style.display = 'none');
@@ -3795,7 +4543,7 @@ footer{
   // Client parity (AnimatedCape.java tick): animated cape frames re-uploaded to the cape
   // texture EVERY frame (sequence via frameCount/frameDelayMs, GIF via live drawImage).
   // ---- Soul GitHub capes: JS mirror of Soul-Client GithubCapeManager.java ----
-  // Same private repo SoulTeams/Soul-Capes, same layout:
+  // Same private repo SoulTeam26/Cosmetics, same layout:
   //   capes/<id>.png            -> static cape  (client: free=true)
   //   capes/<id>/<id>_<n>.png   -> animated cape frames (client: frameDelayMs per cape)
   // Same behaviour: RAM-only cache, black loading cape while downloading,
@@ -3806,11 +4554,16 @@ footer{
   // Override without editing code:
   //   localStorage.setItem('soul_github_token', '<NEW_PAT>')
   // or: window.SOUL_GITHUB_TOKEN = '<NEW_PAT>'
-  const SOUL_GH_REPO = 'SoulTeams/Soul-Capes';
+  // SECURITY: no hard-coded token. The private cosmetics repo is read either
+  // via your OWN override token (below) or through the stateless Vercel relay
+  // (Soul-Web/api/gh-proxy.js) which holds the PAT server-side. Override without
+  // editing code:
+  //   localStorage.setItem('soul_github_token', '<YOUR_PAT>')
+  // or: window.SOUL_GITHUB_TOKEN = '<YOUR_PAT>'
+  const SOUL_GH_REPO = 'SoulTeam26/Cosmetics';
   const SOUL_GH_BRANCH = 'main';
   const SOUL_GH_API = 'https://api.github.com/repos/' + SOUL_GH_REPO;
   const SOUL_GH_RAW = 'https://raw.githubusercontent.com/' + SOUL_GH_REPO + '/' + SOUL_GH_BRANCH;
-  const SOUL_GH_DEFAULT_TOKEN = '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';
   const soulGhRamBytes = new Map();
   const soulGhRamImgs = new Map();
   const soulGhDirCache = new Map();
@@ -3825,7 +4578,15 @@ footer{
       const t = localStorage.getItem('soul_github_token');
       if (t && t.trim()) return t.trim();
     } catch (_) {}
-    return SOUL_GH_DEFAULT_TOKEN;
+    return '';
+  }
+  // The gh relay only makes sense when the page itself is served over
+  // http(s) (Vercel/production). file:// has no /api/ prefix.
+  function soulGhProxyBase() {
+    try {
+      if (!/^(https?:$)/.test(location.protocol)) return '';
+      return location.origin + '/api/gh-proxy';
+    } catch (_) { return ''; }
   }
   function soulGhTextureBase(item) {
     // Repo location of a cape. Handles BOTH schemes seen in Firebase:
@@ -3899,19 +4660,32 @@ footer{
   }
   async function soulGhFetchBytes(repoPath) {
     const token = soulGhToken();
+    const proxyBase = soulGhProxyBase();
     let status = 0;
-    try {
-      const r = await soulFetchTimeout(SOUL_GH_API + '/contents/' + repoPath + '?ref=' + SOUL_GH_BRANCH, {
-        headers: { 'Accept': 'application/vnd.github.raw', 'Authorization': 'Bearer ' + token, 'X-GitHub-Api-Version': '2022-11-28' }
-      }, 20000);
-      status = r.status;
-      if (r.ok) { __soulGhLastError = ''; return await r.blob(); }
-    } catch (e) { if (!status) status = -1; }
-    try {
-      const r2 = await soulFetchTimeout(SOUL_GH_RAW + '/' + repoPath, { headers: { 'Authorization': 'Bearer ' + token } }, 20000);
-      if (r2.ok) { __soulGhLastError = ''; return await r2.blob(); }
-      if (!status) status = r2.status;
-    } catch (_) {}
+    if (token) {
+      try {
+        const r = await soulFetchTimeout(SOUL_GH_API + '/contents/' + repoPath + '?ref=' + SOUL_GH_BRANCH, {
+          headers: { 'Accept': 'application/vnd.github.raw', 'Authorization': 'Bearer ' + token, 'X-GitHub-Api-Version': '2022-11-28' }
+        }, 20000);
+        status = r.status;
+        if (r.ok) { __soulGhLastError = ''; return await r.blob(); }
+      } catch (e) { if (!status) status = -1; }
+      try {
+        const r2 = await soulFetchTimeout(SOUL_GH_RAW + '/' + repoPath, { headers: { 'Authorization': 'Bearer ' + token } }, 20000);
+        if (r2.ok) { __soulGhLastError = ''; return await r2.blob(); }
+        if (!status) status = r2.status;
+      } catch (_) {}
+    }
+    // No personal token (or it failed): relay through the serverless proxy,
+    // which holds the read-only PAT server-side. Only available when the site
+    // itself is served over http(s).
+    if (proxyBase) {
+      try {
+        const r3 = await soulFetchTimeout(proxyBase + '?path=' + encodeURIComponent(repoPath), {}, 20000);
+        if (r3.ok) { __soulGhLastError = ''; return await r3.blob(); }
+        if (!status || status === 404) status = r3.status;
+      } catch (_) {}
+    }
     __soulGhLastError = status === -1 ? 'OFFLINE' : ('HTTP ' + status);
     try { console.warn('[Soul3D] GitHub fetch failed:', repoPath, __soulGhLastError); } catch (_) {}
     throw new Error('gh ' + __soulGhLastError + ' ' + repoPath);
@@ -3934,8 +4708,13 @@ footer{
   async function soulGhList(dir) {
     if (soulGhDirCache.has(dir)) return soulGhDirCache.get(dir);
     try {
-      const r = await fetch(SOUL_GH_API + '/contents/' + dir + '?ref=' + SOUL_GH_BRANCH, {
-        headers: { 'Accept': 'application/vnd.github+json', 'Authorization': 'Bearer ' + soulGhToken(), 'X-GitHub-Api-Version': '2022-11-28' }
+      const token = soulGhToken();
+      const proxyBase = soulGhProxyBase();
+      const url = token
+        ? SOUL_GH_API + '/contents/' + dir + '?ref=' + SOUL_GH_BRANCH
+        : proxyBase + '?dir=' + encodeURIComponent(dir);
+      const r = await fetch(url, {
+        headers: token ? { 'Accept': 'application/vnd.github+json', 'Authorization': 'Bearer ' + token, 'X-GitHub-Api-Version': '2022-11-28' } : {}
       });
       if (!r.ok) { soulGhDirCache.set(dir, null); return null; }
       const arr = await r.json();
@@ -4498,7 +5277,7 @@ footer{
     // MODEL SOURCES ONLY — shop banners (icon/preview) never go on the model.
     try {
       // Client parity first: github-managed capes (texture "github/...") stream PNG
-      // bytes straight from SoulTeams/Soul-Capes, like GithubCapeManager.
+      // bytes straight from SoulTeam26/Cosmetics, like GithubCapeManager.
       if (typeof soulGhIsManaged === 'function' && soulGhIsManaged(item)) {
         try {
           const g = await soulGhResolve(item, id);
@@ -5237,6 +6016,7 @@ footer{
     if (h === 'posts') showPostsPage();
     else if (h === 'jobs') showJobsPage();
     else if (h === 'cosmetics') showCosmeticsPage();
+    else if (h === 'coins') showCoinsPage();
     else if (h === 'tickets') showTicketsPage();
     else if (h === 'redeem') showRedeemPage();
     else if (h.indexOf('post/') === 0) {
@@ -5454,6 +6234,624 @@ class SoulWebToast {
 window.soulToast = new SoulWebToast();
 window.notifications = window.soulToast; // compat with existing calls
 // helper for quick toasts from console: soulToast.show('error','No Internet','…')
+
+// ================= SOUL ACCOUNT (Firebase Auth) =================
+// Shares the same Firebase project (soul-backend) as the Soul Launcher.
+// Accounts created here work in the launcher, and vice versa.
+
+const soulAuthFirebaseConfig = {
+	apiKey: "AIzaSyCAalZXTgdIg58oip1Ang5CJVPRdp9YzzQ",
+	authDomain: "soul-backend.firebaseapp.com",
+	databaseURL: "https://soul-backend-default-rtdb.firebaseio.com",
+	projectId: "soul-backend",
+	storageBucket: "soul-backend.firebasestorage.app",
+	messagingSenderId: "553383169433",
+	appId: "1:553383169433:web:03aa34c90ebda216169708"
+};
+
+if (!firebase.apps.length) {
+	firebase.initializeApp(soulAuthFirebaseConfig);
+}
+
+let soulAuth = null;
+let soulCurrentTab = 'login';
+
+function initSoulAuth() {
+	if (typeof firebase !== 'undefined' && firebase.auth) {
+		soulAuth = firebase.auth();
+		soulAuth.onAuthStateChanged(async (user) => {
+			if (user) {
+				// Require verification before treating as logged in
+				if (!user.emailVerified) {
+					// Never wipe a Microsoft/offline selection — only clear if the
+					// selected account IS this (unverified) Soul account.
+					try {
+						const cur = JSON.parse(localStorage.getItem('soul_current') || 'null');
+						if (!cur || cur.type === 'soul') localStorage.removeItem('soul_current');
+					} catch (e) {}
+					updateSoulAuthUI();
+					return;
+				}
+				// Resolve the Minecraft username stored for this Soul account (if any)
+				let username = user.displayName || user.email.split('@')[0];
+				try {
+					const snap = await firebase.database().ref(`users/${user.uid}`).once('value');
+					const profile = snap.val();
+					if (profile && profile.minecraftUsername) username = profile.minecraftUsername;
+				} catch (e) { /* ignore */ }
+				// Save to localStorage for the website's coin/cosmetics system.
+				// IMPORTANT: never clobber an explicitly selected Microsoft/offline
+				// account — the user picked it deliberately (coins & ownership are
+				// bound to it). Only auto-select/refresh the Soul account when the
+				// active selection is absent or itself a Soul account.
+				const account = {
+					id: user.uid,
+					name: username,
+					email: user.email,
+					type: 'soul',
+					emailVerified: user.emailVerified,
+					minecraftUsername: username,
+					skin: `https://minotar.net/helm/${encodeURIComponent(username)}/64.png`
+				};
+				try {
+					const cur = JSON.parse(localStorage.getItem('soul_current') || 'null');
+					if (!cur || cur.type === 'soul') {
+						localStorage.setItem('soul_current', JSON.stringify(account));
+					}
+				} catch (e) {}
+				let accounts = JSON.parse(localStorage.getItem('soul_accounts') || '[]');
+				if (!accounts.find(a => a.id === user.uid && a.type === 'soul')) {
+					accounts.push(account);
+					localStorage.setItem('soul_accounts', JSON.stringify(accounts));
+				} else {
+					// refresh the stored Soul profile (username may have changed)
+					try {
+						accounts = accounts.map(a => (a.id === user.uid && a.type === 'soul') ? account : a);
+						localStorage.setItem('soul_accounts', JSON.stringify(accounts));
+					} catch (e) {}
+				}
+				updateSoulAuthUI();
+			} else {
+				// Firebase signed out — keep a deliberately selected Microsoft/offline
+				// account active; only drop the selection if it was a Soul account.
+				try {
+					const cur = JSON.parse(localStorage.getItem('soul_current') || 'null');
+					if (!cur || cur.type === 'soul') localStorage.removeItem('soul_current');
+				} catch (e) {}
+				updateSoulAuthUI();
+			}
+		});
+	}
+}
+
+function updateSoulAuthUI() {
+	const rawUser = soulAuth ? soulAuth.currentUser : null;
+	const user = (rawUser && rawUser.emailVerified) ? rawUser : null;
+	const desktopSwitcher = document.getElementById('desktop-soul-account-switcher');
+	const mobileSwitcher = document.getElementById('mobile-soul-account-switcher');
+	const footerSwitcher = document.getElementById('footer-soul-account-switcher');
+	const desktopCta = document.querySelector('.soul-login-cta');
+	const mobileCta = document.querySelectorAll('.soul-login-cta')[1];
+	
+	if (user) {
+		// The header chip mirrors the ACTIVE (selected) account so the wallet /
+		// store identity and the chip never disagree. Soul accounts show the
+		// full email instead of the username.
+		let cur = null;
+		try { cur = JSON.parse(localStorage.getItem('soul_current') || 'null'); } catch (e) {}
+		if (cur && cur.type === 'soul' && cur.id !== user.uid) cur = null; // stale selection
+		const displayName = cur ? cur.name : (user.email || '').split('@')[0];
+		const mail = (cur && cur.type === 'soul' && cur.email) ? cur.email : user.email;
+		let typeLabel;
+		if (!cur) typeLabel = user.emailVerified ? 'Soul Account (Verified)' : 'Soul Account (Unverified)';
+		else if (cur.type === 'microsoft') typeLabel = cur.verified ? 'Microsoft Account · Verified' : 'Microsoft Account';
+		else if (cur.type === 'offline') typeLabel = 'Offline Account';
+		else typeLabel = user.emailVerified ? `Soul Account · ${mail}` : 'Soul Account (Unverified)';
+		const avatar = cur
+			? (cur.skin || `https://minotar.net/helm/${encodeURIComponent(displayName)}/64.png`)
+			: `https://minotar.net/helm/${encodeURIComponent(displayName)}/64.png`;
+		
+		// Desktop trigger
+		const dtAvatar = document.getElementById('desktop-soul-acc-avatar');
+		const dtName = document.getElementById('desktop-soul-acc-name');
+		const dtType = document.getElementById('desktop-soul-acc-type');
+		if (dtAvatar) dtAvatar.src = avatar;
+		if (dtName) dtName.textContent = displayName;
+		if (dtType) dtType.textContent = typeLabel;
+		
+		// Mobile trigger
+		const mtAvatar = document.getElementById('mobile-soul-acc-avatar');
+		const mtName = document.getElementById('mobile-soul-acc-name');
+		const mtType = document.getElementById('mobile-soul-acc-type');
+		if (mtAvatar) mtAvatar.src = avatar;
+		if (mtName) mtName.textContent = displayName;
+		if (mtType) mtType.textContent = typeLabel;
+		
+		// Footer trigger
+		const ftAvatar = document.getElementById('footer-soul-acc-avatar');
+		const ftName = document.getElementById('footer-soul-acc-name');
+		const ftType = document.getElementById('footer-soul-acc-type');
+		if (ftAvatar) ftAvatar.src = avatar;
+		if (ftName) ftName.textContent = displayName;
+		if (ftType) ftType.textContent = typeLabel;
+		
+		// Show switchers, hide CTAs
+		[desktopSwitcher, mobileSwitcher, footerSwitcher].forEach(el => { if (el) el.style.display = ''; });
+		[desktopCta, mobileCta].forEach(el => { if (el) el.style.display = 'none'; });
+		
+		renderSoulAccDropdown();
+	} else {
+		[desktopSwitcher, mobileSwitcher, footerSwitcher].forEach(el => { if (el) el.style.display = 'none'; });
+		[desktopCta, mobileCta].forEach(el => { if (el) el.style.display = ''; });
+	}
+}
+
+window.toggleSoulAccList = (which) => {
+	const ids = ['desktop-soul-acc-dropdown', 'mobile-soul-acc-dropdown'];
+	const targetId = (which === 'mobile') ? 'mobile-soul-acc-dropdown' : 'desktop-soul-acc-dropdown';
+	const dd = document.getElementById(targetId);
+	if (!dd) return;
+	const wasOpen = !dd.classList.contains('hidden');
+	ids.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+	if (!wasOpen) {
+		dd.classList.remove('hidden');
+		renderSoulAccDropdown();
+	}
+};
+
+window.renderSoulAccDropdown = () => {
+	const dropdowns = [
+		document.getElementById('desktop-soul-acc-dropdown'),
+		document.getElementById('mobile-soul-acc-dropdown')
+	];
+	const accounts = JSON.parse(localStorage.getItem('soul_accounts') || '[]');
+	const cur = JSON.parse(localStorage.getItem('soul_current') || 'null');
+	
+	dropdowns.forEach(dd => {
+		if (!dd) return;
+		if (!accounts.length) {
+			dd.innerHTML = '<div class="soul-acc-empty">No accounts</div>';
+			return;
+		}
+		dd.innerHTML = accounts.map(a => {
+			const active = cur && cur.id === a.id;
+			const avatar = a.skin || `https://minotar.net/helm/${encodeURIComponent(a.name)}/64.png`;
+			return `
+				<div class="soul-acc-card ${active ? 'active' : ''}" onclick="selectSoulAcc('${a.id}', '${a.name}', '${a.type}', event)">
+					<img src="${avatar}" alt="" onerror="this.src='soul.png'">
+					<div class="soul-acc-info">
+						<span class="soul-acc-name">${a.name}${active ? ' ✓' : ''}</span>
+						<span class="soul-acc-type">${a.type === 'microsoft' ? 'Microsoft' : a.type === 'offline' ? 'Offline' : 'Soul'}</span>
+					</div>
+					<button class="soul-acc-remove" title="Remove account" onclick="removeSoulAcc('${a.id}', '${a.name}', '${a.type}', event)"><i class="fa-solid fa-trash-can"></i></button>
+				</div>
+			`;
+		}).join('');
+		// Add logout option at bottom
+		dd.innerHTML += `
+			<div class="soul-acc-card" style="border-top:2px solid var(--ink);margin-top:8px;padding-top:8px;" onclick="logoutSoulAll()">
+				<div class="soul-acc-info">
+					<span class="soul-acc-name">Logout</span>
+					<span class="soul-acc-type">Sign out of all accounts</span>
+				</div>
+				<i class="fa-solid fa-right-from-bracket"></i>
+			</div>
+			<div class="soul-acc-card" style="background:#30b0ff;color:#fff;" onclick="closeSoulAccList(); msLoginFlow();">
+				<div class="soul-acc-info">
+					<span class="soul-acc-name"><i class="fa-solid fa-plus"></i> Add Account</span>
+					<span class="soul-acc-type">Minecraft — launcher code / Microsoft</span>
+				</div>
+				<i class="fa-solid fa-link"></i>
+			</div>
+			<div class="soul-acc-card" onclick="closeSoulAccList(); showSoulLogin();">
+				<div class="soul-acc-info">
+					<span class="soul-acc-name">Soul Login</span>
+					<span class="soul-acc-type">Sign in / sign up with email</span>
+				</div>
+				<i class="fa-solid fa-envelope"></i>
+			</div>
+		`;
+	});
+};
+
+window.closeSoulAccList = () => {
+	[document.getElementById('desktop-soul-acc-dropdown'), document.getElementById('mobile-soul-acc-dropdown')].forEach(dd => { if (dd) dd.classList.add('hidden'); });
+};
+
+window.logoutSoulAll = () => {
+	closeSoulAccList();
+	if (soulAuth) soulAuth.signOut().catch(() => {});
+	try {
+		const cur = JSON.parse(localStorage.getItem('soul_current') || 'null');
+		if (!cur || cur.type === 'soul') localStorage.removeItem('soul_current');
+	} catch (e) {}
+	updateSoulAuthUI();
+	window.notifications && window.notifications.show('info', 'Signed Out', 'You are signed out of your Soul account.');
+};
+
+window.selectSoulAcc = (id, name, type, e) => {
+	if (e) e.stopPropagation();
+	const accounts = JSON.parse(localStorage.getItem('soul_accounts') || '[]');
+	const acc = accounts.find(a => a.id === id && a.name === name && a.type === type);
+	if (acc) {
+		localStorage.setItem('soul_current', JSON.stringify(acc));
+		updateSoulAuthUI();
+		closeSoulAccList();
+		window.notifications.show('success', 'Account Switched', `Logged in as ${name}`);
+	}
+};
+
+window.removeSoulAcc = (idOrEvent, name, type, e) => {
+	// If called from remove button click event (only event passed)
+	if (idOrEvent && idOrEvent.target && idOrEvent.target.closest) {
+		const btn = idOrEvent.target.closest('.soul-acc-remove');
+		const card = btn.closest('.soul-acc-card');
+		const nameEl = card.querySelector('.soul-acc-name');
+		name = nameEl.textContent.replace(' ✓', '');
+		const accounts = JSON.parse(localStorage.getItem('soul_accounts') || '[]');
+		const acc = accounts.find(a => a.name === name);
+		idOrEvent = acc.id;
+		type = acc.type;
+		idOrEvent.preventDefault();
+		idOrEvent.stopPropagation();
+	}
+	const id = idOrEvent;
+	if (!confirm(`Remove account "${name}"?`)) return;
+	
+	let accounts = JSON.parse(localStorage.getItem('soul_accounts') || '[]');
+	accounts = accounts.filter(a => !(a.id === id && a.name === name && a.type === type));
+	localStorage.setItem('soul_accounts', JSON.stringify(accounts));
+	
+	const cur = JSON.parse(localStorage.getItem('soul_current') || 'null');
+	if (cur && cur.id === id && cur.name === name && cur.type === type) {
+		if (accounts.length) {
+			localStorage.setItem('soul_current', JSON.stringify(accounts[0]));
+		} else {
+			localStorage.removeItem('soul_current');
+			if (soulAuth) soulAuth.signOut().catch(() => {});
+		}
+	}
+	updateSoulAuthUI();
+	renderSoulAccDropdown();
+	window.notifications.show('warning', 'Account Removed', `Removed "${name}"`);
+};
+
+window.showSoulLogin = () => {
+	const modal = document.getElementById('soul-login-modal');
+	if (modal) modal.classList.add('open');
+	soulCurrentTab = 'login';
+	updateSoulAuthTabs();
+	document.getElementById('soul-auth-error').classList.remove('show');
+	document.getElementById('soul-email').value = '';
+	document.getElementById('soul-password').value = '';
+	document.getElementById('soul-login-btn-text').textContent = 'Sign In';
+};
+
+window.closeSoulLogin = () => {
+	const modal = document.getElementById('soul-login-modal');
+	if (modal) modal.classList.remove('open');
+	closeSoulAccList();
+};
+
+window.updateSoulAuthTabs = () => {
+	const loginBtn = document.getElementById('soul-tab-login');
+	const signupBtn = document.getElementById('soul-tab-signup');
+	const form = document.getElementById('soul-login-form');
+	const btnText = document.getElementById('soul-login-btn-text');
+	if (!loginBtn || !signupBtn) return;
+	if (soulCurrentTab === 'login') {
+		loginBtn.style.borderBottomColor = 'var(--bolt)';
+		loginBtn.style.color = 'var(--ink)';
+		signupBtn.style.borderBottomColor = 'transparent';
+		signupBtn.style.color = 'var(--muted)';
+		btnText.textContent = 'Sign In';
+	} else {
+		loginBtn.style.borderBottomColor = 'transparent';
+		loginBtn.style.color = 'var(--muted)';
+		signupBtn.style.borderBottomColor = 'var(--bolt)';
+		signupBtn.style.color = 'var(--ink)';
+		btnText.textContent = 'Create Account';
+	}
+};
+
+window.toggleSoulAuthTab = (tab) => {
+	soulCurrentTab = tab;
+	updateSoulAuthTabs();
+};
+
+window.soulLogin = async (e) => {
+	e.preventDefault();
+	const errorEl = document.getElementById('soul-auth-error');
+	errorEl.classList.remove('show');
+	const email = document.getElementById('soul-email').value.trim();
+	const password = document.getElementById('soul-password').value;
+	if (!email || !password) {
+		errorEl.textContent = 'Please enter both email and password.';
+		errorEl.classList.add('show');
+		return;
+	}
+	if (soulCurrentTab === 'login') {
+		try {
+			const cred = await soulAuth.signInWithEmailAndPassword(email, password);
+			const user = cred.user;
+			// Require email verification before login
+			if (!user.emailVerified) {
+				window.notifications.show('warning', 'Email Not Verified', 'Please verify your email before signing in. Check your inbox.');
+				closeSoulLogin();
+				showSoulVerify();
+				return;
+			}
+			window.notifications.show('success', 'Welcome Back', `Signed in as ${email}`);
+			closeSoulLogin();
+			const has = await soulHasUsername(user);
+			if (!has) showSoulUsernameSetup(user);
+		} catch (err) {
+			console.error('[Soul Login] Error:', err);
+			let msg = 'Login failed. Please try again.';
+			if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') msg = 'Invalid email or password.';
+			else if (err.code === 'auth/invalid-email') msg = 'Invalid email address.';
+			else if (err.code === 'auth/user-disabled') msg = 'This account has been disabled.';
+			else if (err.message) msg = err.message;
+			errorEl.textContent = msg;
+			errorEl.classList.add('show');
+		}
+	} else {
+		if (password.length < 6) {
+			errorEl.textContent = 'Password must be at least 6 characters.';
+			errorEl.classList.add('show');
+			return;
+		}
+		try {
+			const userCred = await soulAuth.createUserWithEmailAndPassword(email, password);
+			const user = userCred.user;
+			await user.sendEmailVerification();
+			window.notifications.show('success', 'Account Created', 'Verification email sent. Check your inbox (and spam folder).');
+			closeSoulLogin();
+			showSoulVerify();
+		} catch (err) {
+			console.error('[Soul Signup] Error:', err);
+			let msg = 'Account creation failed.';
+			if (err.code === 'auth/email-already-in-use') msg = 'An account with this email already exists.';
+			else if (err.code === 'auth/invalid-email') msg = 'Invalid email address.';
+			else if (err.code === 'auth/weak-password') msg = 'Password is too weak.';
+			else if (err.code === 'auth/too-many-requests') msg = 'Too many requests. Try again later.';
+			else if (err.message) msg = err.message;
+			errorEl.textContent = msg;
+			errorEl.classList.add('show');
+		}
+	}
+};
+
+window.closeSoulUsername = () => {
+	const modal = document.getElementById('soul-username-modal');
+	if (modal) modal.classList.remove('open');
+};
+
+window.showSoulUsernameSetup = (user) => {
+	const modal = document.getElementById('soul-username-modal');
+	if (modal) modal.classList.add('open');
+	const err = document.getElementById('soul-username-error');
+	const suc = document.getElementById('soul-username-success');
+	if (err) err.classList.remove('show');
+	if (suc) suc.style.display = 'none';
+	const inp = document.getElementById('soul-username-input');
+	if (inp) { inp.value = ''; inp.focus(); }
+};
+
+window.saveSoulUsername = async () => {
+	const input = document.getElementById('soul-username-input');
+	const errEl = document.getElementById('soul-username-error');
+	const sucEl = document.getElementById('soul-username-success');
+	const btn = document.getElementById('soul-username-save');
+	if (errEl) errEl.classList.remove('show');
+	if (sucEl) sucEl.style.display = 'none';
+	const username = (input ? input.value.trim() : '');
+	if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) {
+		if (errEl) { errEl.textContent = 'Username must be 3-16 characters (letters, numbers, underscores).'; errEl.classList.add('show'); }
+		return;
+	}
+	const rawUser = soulAuth ? soulAuth.currentUser : null;
+	const user = (rawUser && rawUser.emailVerified) ? rawUser : null;
+	if (!user) {
+		if (errEl) { errEl.textContent = 'Not signed in. Please log in again.'; errEl.classList.add('show'); }
+		return;
+	}
+	if (btn) btn.disabled = true;
+	try {
+		const lower = username.toLowerCase();
+		// check availability
+		const snap = await firebase.database().ref(`minecraftUsernames/${lower}`).once('value');
+		const data = snap.val();
+		if (data && data.uid && data.uid !== user.uid) {
+			if (errEl) { errEl.textContent = 'This username is already taken.'; errEl.classList.add('show'); }
+			if (btn) btn.disabled = false;
+			return;
+		}
+		// claim
+		await firebase.database().ref(`minecraftUsernames/${lower}`).set({ uid: user.uid });
+		// release old
+		try {
+			const profSnap = await firebase.database().ref(`users/${user.uid}`).once('value');
+			const existing = profSnap.val();
+			if (existing && existing.minecraftUsernameLower && existing.minecraftUsernameLower !== lower) {
+				await firebase.database().ref(`minecraftUsernames/${existing.minecraftUsernameLower}`).remove();
+			}
+		} catch (e) {}
+		await firebase.database().ref(`users/${user.uid}`).set({
+			email: user.email,
+			minecraftUsername: username,
+			minecraftUsernameLower: lower,
+			createdAt: Date.now()
+		});
+		// update local account
+		const account = {
+			id: user.uid,
+			name: username,
+			email: user.email,
+			type: 'soul',
+			emailVerified: user.emailVerified,
+			minecraftUsername: username,
+			skin: `https://minotar.net/helm/${encodeURIComponent(username)}/64.png`
+		};
+		localStorage.setItem('soul_current', JSON.stringify(account));
+		let accounts = JSON.parse(localStorage.getItem('soul_accounts') || '[]');
+		if (!accounts.find(a => a.id === user.uid && a.type === 'soul')) accounts.push(account);
+		else accounts = accounts.map(a => (a.id === user.uid && a.type === 'soul') ? account : a);
+		localStorage.setItem('soul_accounts', JSON.stringify(accounts));
+		if (sucEl) { sucEl.textContent = 'Username saved!'; sucEl.style.display = 'block'; }
+		if (btn) btn.disabled = false;
+		setTimeout(() => { closeSoulUsername(); updateSoulAuthUI(); }, 800);
+	} catch (err) {
+		console.error('[Soul Username] Error:', err);
+		if (errEl) { errEl.textContent = err.message || 'Failed to save username.'; errEl.classList.add('show'); }
+		if (btn) btn.disabled = false;
+	}
+};
+
+async function soulHasUsername(user) {
+	const u = user || (soulAuth ? soulAuth.currentUser : null);
+	if (!u) return true;
+	try {
+		const snap = await firebase.database().ref(`users/${u.uid}`).once('value');
+		const p = snap.val();
+		return !!(p && p.minecraftUsername);
+	} catch (e) { return false; }
+}
+
+window.closeSoulVerify = () => {
+	const modal = document.getElementById('soul-verify-modal');
+	if (modal) modal.classList.remove('open');
+};
+
+window.showSoulVerify = () => {
+	const modal = document.getElementById('soul-verify-modal');
+	const rawUser = soulAuth ? soulAuth.currentUser : null;
+	const user = (rawUser && rawUser.emailVerified) ? rawUser : null;
+	const emailEl = document.getElementById('soul-verify-email');
+	if (emailEl) emailEl.textContent = user ? user.email : '—';
+	const err = document.getElementById('soul-verify-error');
+	const suc = document.getElementById('soul-verify-success');
+	if (err) err.classList.remove('show');
+	if (suc) suc.style.display = 'none';
+	if (modal) modal.classList.add('open');
+};
+
+window.checkSoulVerification = async () => {
+	const user = soulAuth ? soulAuth.currentUser : null;
+	const errEl = document.getElementById('soul-verify-error');
+	const sucEl = document.getElementById('soul-verify-success');
+	const btn = document.getElementById('soul-verify-check');
+	if (errEl) errEl.classList.remove('show');
+	if (sucEl) sucEl.style.display = 'none';
+	if (!user) {
+		if (errEl) { errEl.textContent = 'Not signed in.'; errEl.classList.add('show'); }
+		return;
+	}
+	if (btn) btn.disabled = true;
+	try {
+		await user.reload();
+		if (user.emailVerified) {
+			if (sucEl) { sucEl.textContent = 'Email verified successfully!'; sucEl.style.display = 'block'; }
+			// proceed like login
+			closeSoulVerify();
+			const has = await soulHasUsername(user);
+			if (!has) showSoulUsernameSetup(user);
+			else {
+				// save account
+				let username = user.displayName || user.email.split('@')[0];
+				try {
+					const snap = await firebase.database().ref(`users/${user.uid}`).once('value');
+					const profile = snap.val();
+					if (profile && profile.minecraftUsername) username = profile.minecraftUsername;
+				} catch (e) {}
+				const account = {
+					id: user.uid,
+					name: username,
+					email: user.email,
+					type: 'soul',
+					emailVerified: true,
+					minecraftUsername: username,
+					skin: `https://minotar.net/helm/${encodeURIComponent(username)}/64.png`
+				};
+				localStorage.setItem('soul_current', JSON.stringify(account));
+				let accounts = JSON.parse(localStorage.getItem('soul_accounts') || '[]');
+				if (!accounts.find(a => a.id === user.uid && a.type === 'soul')) accounts.push(account);
+				else accounts = accounts.map(a => (a.id === user.uid && a.type === 'soul') ? account : a);
+				localStorage.setItem('soul_accounts', JSON.stringify(accounts));
+				updateSoulAuthUI();
+				window.notifications.show('success', 'Welcome Back', `Signed in as ${username}`);
+			}
+		} else {
+			if (errEl) { errEl.textContent = 'Email is not yet verified. Please check your inbox and click the verification link.'; errEl.classList.add('show'); }
+		}
+	} catch (err) {
+		if (errEl) { errEl.textContent = err.message || 'Soul account error.'; errEl.classList.add('show'); }
+	} finally {
+		if (btn) btn.disabled = false;
+	}
+};
+
+window.resendSoulVerification = async () => {
+	const user = soulAuth ? soulAuth.currentUser : null;
+	const errEl = document.getElementById('soul-verify-error');
+	const sucEl = document.getElementById('soul-verify-success');
+	const btn = document.getElementById('soul-verify-resend');
+	if (errEl) errEl.classList.remove('show');
+	if (sucEl) sucEl.style.display = 'none';
+	if (!user) {
+		if (errEl) { errEl.textContent = 'Not signed in.'; errEl.classList.add('show'); }
+		return;
+	}
+	if (btn) btn.disabled = true;
+	try {
+		await user.sendEmailVerification();
+		if (sucEl) { sucEl.textContent = 'Verification email resent! Please check your inbox (and spam folder).'; sucEl.style.display = 'block'; }
+	} catch (err) {
+		if (errEl) { errEl.textContent = err.message || 'Failed to resend verification email.'; errEl.classList.add('show'); }
+	} finally {
+		if (btn) btn.disabled = false;
+	}
+};
+
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+	initSoulAuth();
+	const loginBtn = document.getElementById('soul-tab-login');
+	const signupBtn = document.getElementById('soul-tab-signup');
+	const form = document.getElementById('soul-login-form');
+	if (loginBtn) loginBtn.onclick = (e) => { e.preventDefault(); toggleSoulAuthTab('login'); };
+	if (signupBtn) signupBtn.onclick = (e) => { e.preventDefault(); toggleSoulAuthTab('signup'); };
+	if (form) form.onsubmit = soulLogin;
+	const usernameSaveBtn = document.getElementById('soul-username-save');
+	if (usernameSaveBtn) usernameSaveBtn.onclick = saveSoulUsername;
+	const verifyCheckBtn = document.getElementById('soul-verify-check');
+	if (verifyCheckBtn) verifyCheckBtn.onclick = checkSoulVerification;
+	const verifyResendBtn = document.getElementById('soul-verify-resend');
+	if (verifyResendBtn) verifyResendBtn.onclick = resendSoulVerification;
+	const verifyModal = document.getElementById('soul-verify-modal');
+	if (verifyModal) verifyModal.onclick = (e) => { if (e.target === verifyModal) closeSoulVerify(); };
+	const usernameInput = document.getElementById('soul-username-input');
+	if (usernameInput) usernameInput.onkeypress = (e) => { if (e.key === 'Enter') saveSoulUsername(); };
+	const usernameModal = document.getElementById('soul-username-modal');
+	if (usernameModal) usernameModal.onclick = (e) => { if (e.target === usernameModal) closeSoulUsername(); };
+	// Close modal when clicking outside
+	const modal = document.getElementById('soul-login-modal');
+	if (modal) {
+		modal.onclick = (e) => { if (e.target === modal) closeSoulLogin(); };
+	}
+	// Close dropdowns when clicking outside
+	document.addEventListener('click', (e) => {
+		const triggers = Array.from(document.querySelectorAll('.soul-account-trigger'));
+		const inside = triggers.some(t => t && t.contains(e.target));
+		const dropdowns = [
+			document.getElementById('desktop-soul-acc-dropdown'),
+			document.getElementById('mobile-soul-acc-dropdown')
+		];
+		if (!inside) {
+			dropdowns.forEach(dd => { if (dd) dd.classList.add('hidden'); });
+		}
+	});
+});
 </script>
 </body>
 </html>

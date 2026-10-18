@@ -7,6 +7,48 @@
     },
     "posts": {
       ".indexOn": ["timestamp"]
+    },
+    "soul_coins": {
+      "$key": {
+        "balance": {
+          ".validate": "newData.isNumber()"
+        },
+        "accountType": {
+          ".validate": "newData.isString()"
+        }
+      }
+    },
+    "coin_orders": {
+      "$order": {
+        "coins": {
+          ".validate": "newData.isNumber()"
+        },
+        "price": {
+          ".validate": "newData.isNumber()"
+        },
+        "status": {
+          ".validate": "newData.isString()"
+        }
+      }
+    },
+    "capes": {
+      "catalog": {
+        "$id": {
+          "price": {
+            ".validate": "newData.isNumber()"
+          },
+          "coins": {
+            ".validate": "newData.isNumber()"
+          }
+        }
+      },
+      "inventory": {
+        "$key": {
+          "ownedItemIds": {
+            ".validate": "newData.isList()"
+          }
+        }
+      }
     }
   }
 }
