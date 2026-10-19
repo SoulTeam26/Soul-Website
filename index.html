@@ -5064,6 +5064,7 @@ footer{
     try { viewer.autoRotate = false; viewer.autoRotateSpeed = 1.0; } catch (_) {}
     soulSetupLights(viewer);
     soulApplyAnim(viewer, walk !== false);
+    try { soulCrispPlayerTextures(viewer); } catch (_) {}
     return viewer;
   }
   // Per-frame cape ticker — JS mirror of Soul-Client AnimatedCape.tick().
@@ -5110,6 +5111,7 @@ footer{
             const f = t.frames[idx];
             try {
               ctx.clearRect(0, 0, v.capeCanvas.width, v.capeCanvas.height);
+              ctx.imageSmoothingEnabled = false;
               ctx.drawImage(f, 0, 0, v.capeCanvas.width, v.capeCanvas.height);
               v.capeTexture.needsUpdate = true;
               t.setStatus('LIVE • frame ' + (idx + 1) + '/' + t.frames.length + ' • ' + t.delay + 'ms');
@@ -5118,6 +5120,7 @@ footer{
         } else if (t.mode === 'gif' && t.gif) {
           try {
             ctx.clearRect(0, 0, v.capeCanvas.width, v.capeCanvas.height);
+            ctx.imageSmoothingEnabled = false;
             ctx.drawImage(t.gif, 0, 0, v.capeCanvas.width, v.capeCanvas.height);
             v.capeTexture.needsUpdate = true;
           } catch (_) {}
@@ -5448,6 +5451,30 @@ footer{
     const ghNote = (typeof soulGhLastError === 'function' && typeof soulGhIsManaged === 'function' && soulGhIsManaged(item)) ? soulGhLastError() : '';
     return { kind: 'static', url: soulBlackCapeURL(), note: ghNote ? ('GH ' + ghNote + ' • NO TEXTURE FILE') : 'PREVIEW ONLY • NO TEXTURE FILE' };
   }
+  /** Pixel-crisp rendering (matches the in-game Minecraft renderer): skins and
+   *  capes are low-res pixel art — three.js default LINEAR magnification blurs
+   *  them on the player, so force NEAREST on every mapped player texture. */
+  function soulCrispPlayerTextures(viewer) {
+    try {
+      viewer.playerObject.traverse(function (o) {
+        if (!o || !o.material) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (let i = 0; i < mats.length; i++) {
+          const m = mats[i];
+          const maps = [];
+          if (m.map) maps.push(m.map);
+          if (m.emissiveMap && m.emissiveMap !== m.map) maps.push(m.emissiveMap);
+          for (let j = 0; j < maps.length; j++) {
+            const tex = maps[j];
+            try {
+              if ('magFilter' in tex) tex.magFilter = 1003; // THREE.NearestFilter
+              tex.needsUpdate = true;
+            } catch (_) {}
+          }
+        }
+      });
+    } catch (_) {}
+  }
   async function soulLoadCapeLive(viewer, ticker, item, id, statusFallback, gen) {
     // gen: modal generation — stale async results are discarded so a slow
     // previous cape can never "leak" onto the newly opened one.
@@ -5507,24 +5534,28 @@ footer{
     // Client parity: full black loading cape while real bytes download (GithubCapeManager).
     if (typeof soulGhIsManaged === 'function' && soulGhIsManaged(item)) {
       try { await viewer.loadCape(soulBlackCapeCanvas(), { makeVisible: true, backEquipment: 'cape' }); } catch (_) {}
+      try { soulCrispPlayerTextures(viewer); } catch (_) {}
       if (ticker) ticker.setStatus('FETCHING GH CAPE…');
     }
     const r = await soulResolveFrames(item, id);
     if (stale()) return 'stale';
     if (r.kind === 'staticImg' && r.img) {
       try { await viewer.loadCape(r.img, { makeVisible: true, backEquipment: 'cape' }); } catch (_) {}
+      try { soulCrispPlayerTextures(viewer); } catch (_) {}
       if (stale()) return 'stale';
       ticker.startStatic(r.gh ? 'GITHUB • LIVE 3D' : (statusFallback || 'STATIC CAPE • LIVE 3D'));
       return 'ghstatic';
     }
     if (r.kind === 'seq' && r.frames.length > 1) {
       try { await viewer.loadCape(r.frames[0], { makeVisible: true, backEquipment: 'cape' }); } catch (_) {}
+      try { soulCrispPlayerTextures(viewer); } catch (_) {}
       if (stale()) return 'stale';
       ticker.startSeq(r.frames, r.delay);
       return 'seq';
     }
     if (r.kind === 'gif' && r.img) {
       try { await viewer.loadCape(r.img, { makeVisible: true, backEquipment: 'cape' }); } catch (_) {}
+      try { soulCrispPlayerTextures(viewer); } catch (_) {}
       if (stale()) return 'stale';
       ticker.startGif(r.img);
       return 'gif';
@@ -5532,6 +5563,7 @@ footer{
     try { await viewer.loadCape(r.url, { makeVisible: true, backEquipment: 'cape' }); } catch (_) {
       try { await viewer.loadCape(null); } catch (_) {}
     }
+    try { soulCrispPlayerTextures(viewer); } catch (_) {}
     if (stale()) return 'stale';
     ticker.startStatic(r.note || statusFallback || 'STATIC CAPE • LIVE 3D');
     return 'static';
