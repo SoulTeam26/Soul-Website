@@ -930,6 +930,15 @@ footer{
 }
 .cosmetics-card .cos-buy-btn:hover{background:var(--bolt);color:var(--ink);border-color:var(--bolt);}
 .cosmetics-card .cos-buy-btn.owned{background:transparent;color:var(--muted);border-color:var(--muted);cursor:default;pointer-events:none;opacity:.5;}
+.cosmetics-card .cos-buy-btn.locked{background:transparent;color:var(--muted);border-color:var(--muted);cursor:default;pointer-events:none;opacity:.6;}
+.cosmetics-card .cos-release-badge,.cosmetics-card .cos-stock-badge,
+.soul-3d-info .cos-release-badge,.soul-3d-info .cos-stock-badge{
+  align-self:flex-start;font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
+  padding:3px 8px;border:1px solid var(--bolt);color:var(--bolt);
+  font-family:'JetBrains Mono',monospace;
+}
+.cosmetics-card .cos-stock-badge,.soul-3d-info .cos-stock-badge{border-color:var(--alert);color:var(--alert);}
+.cosmetics-card .cos-avail-now,.soul-3d-info .cos-avail-now{border-color:#22c55e;color:#22c55e;}
 .cosmetics-card .cos-anim-badge{
   align-self:flex-start;font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
   padding:3px 8px;border:1px solid var(--alert);color:var(--alert);
@@ -2787,17 +2796,30 @@ footer{
       const safeName = (item.name || id).replace(/'/g, "\\'");
       const safeId = String(id).replace(/'/g, "\\'");
       const coinImgTag = ecoCoinIcon(12);
+      const av = cosAvailState(item);
       let btnHtml;
       if (isOwned) btnHtml = '<button class="cos-buy-btn owned">Owned</button>';
+      else if (av.scheduled) btnHtml = `<button class="cos-buy-btn locked">${av.show ? 'Releasing Soon' : 'Unavailable'}</button>`;
+      else if (av.soldOut) btnHtml = '<button class="cos-buy-btn locked">Sold Out</button>';
       else if (coinPrice === 0) btnHtml = `<button class="cos-buy-btn" onclick="event.stopPropagation();buyCosmeticWithCoins('${safeId}','${safeName}',0)">Claim Free</button>`;
       else if (ecoBalance !== null && ecoBalance < coinPrice) btnHtml = `<button class="cos-buy-btn" onclick="event.stopPropagation();showCoinsPage()">Need ${coinPrice - (ecoBalance || 0)} ${coinImgTag}</button>`;
       else btnHtml = `<button class="cos-buy-btn" onclick="event.stopPropagation();buyCosmeticWithCoins('${safeId}','${safeName}',${coinPrice})">Buy ${coinPrice} ${coinImgTag}</button>`;
+      const releaseBadge = (av.show && av.scheduled)
+        ? `<span class="cos-release-badge">DROPS IN <span class="cos-release-timer" data-release-at="${av.releaseAt}">${cosCountdownText(av.releaseAt)}</span></span>`
+        : '';
+      const stockBadge = (av.show && !av.scheduled && av.stock !== null)
+        ? `<span class="cos-stock-badge">${av.soldOut ? 'SOLD OUT' : ('ONLY ' + av.stock + ' LEFT')}</span>`
+        : '';
+      const availBadge = (av.show && !av.scheduled && av.stock === null)
+        ? '<span class="cos-release-badge cos-avail-now">AVAILABLE FOR PURCHASE</span>'
+        : '';
       const priceTag = coinPrice === 0 && isOwned
         ? '<div class="cos-price free">FREE</div>'
         : (coinPrice > 0 ? `<div class="cos-price">${coinImgTag} ${coinPrice}<small>SOUL COINS</small></div>` : '<div class="cos-price free">FREE</div>');
       return `
         <div class="cosmetics-card soul-has3d" data-cape-id="${id}" onclick="openSoulCape3D('${safeId}', event)">
           ${isAnim ? '<span class="cos-anim-badge">ANIMATED • LIVE 3D</span>' : '<span class="cos-anim-badge" style="border-color:var(--bolt);color:var(--bolt);">REAL 3D</span>'}
+          ${releaseBadge}${stockBadge}${availBadge}
           <div class="cos-3d-wrap${cosShow2D ? ' show-2d' : ''}">
             <img src="${imgSrc}" alt="${item.name || id}" class="cos-preview" loading="lazy" onerror="this.outerHTML='<div class=&quot;cos-preview-none&quot;>NO PREVIEW</div>'">
             <canvas class="cos-mini3d on" width="560" height="560"></canvas>
@@ -2814,6 +2836,8 @@ footer{
         </div>
       `;
     }).join('');
+    // Fill the fresh release-timer badges immediately (the 1s interval keeps them live)
+    try { window.cosTickReleaseTimers(); } catch (_) {}
     // Auto-init 3D viewers for all cards (only 3D, no 2D)
     setTimeout(() => {
       const myGen = soulGridGen;
@@ -3371,6 +3395,35 @@ footer{
     return `<img src="soul_coin.png" alt="" style="width:${size}px;height:${size}px;object-fit:contain;vertical-align:-3px;" onerror="this.style.display='none'">`;
   }
 
+  // --- Scheduled drops & limited stock (catalog fields written by the cape/shield builders) ---
+  function cosAvailState(item) {
+    const it = item || {};
+    const releaseAt = (typeof it.releaseAt === 'number' && it.releaseAt > 0) ? it.releaseAt : null;
+    const stock = (typeof it.stock === 'number') ? it.stock : null;
+    const scheduled = releaseAt !== null && Date.now() < releaseAt;
+    const soldOut = stock !== null && stock <= 0;
+    const show = it.showAvailability !== false; // legacy items without the flag count as "show"
+    return { releaseAt, stock, scheduled, soldOut, show };
+  }
+  function cosCountdownText(target) {
+    const ms = (target || 0) - Date.now();
+    if (ms <= 0) return 'Available now';
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    const pad = n => String(n).padStart(2, '0');
+    return d > 0 ? `${d}d ${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(h)}:${pad(m)}:${pad(sec)}`;
+  }
+  window.cosAvailState = cosAvailState;
+  window.cosCountdownText = cosCountdownText;
+  // Live "releases in ..." tick for every visible badge (cards + 3D modal)
+  window.cosTickReleaseTimers = () => {
+    document.querySelectorAll('.cos-release-timer[data-release-at]').forEach(el => {
+      const t = Number(el.getAttribute('data-release-at')) || 0;
+      el.textContent = cosCountdownText(t);
+    });
+  };
+  setInterval(window.cosTickReleaseTimers, 1000);
+
   function coinPriceFor(item) {
     if (!item) return 0;
     if (item.free === true) return 0;
@@ -3382,6 +3435,10 @@ footer{
   window.buyCosmeticWithCoins = async (itemId, itemName, price) => {
     const eco = await getEcoIdentity();
     if (!eco) { alert('Cosmetics are tied to verified accounts. Sign in with a Microsoft account here, or a Soul account. Offline accounts are locked out for security.'); return; }
+    // Scheduled drop / limited stock gate (fields written by the cape & shield builders)
+    const av = cosAvailState((cosmeticsCatalogData || {})[itemId]);
+    if (av.scheduled) { alert(`"${itemName}" is not available for purchase yet — it drops in ${cosCountdownText(av.releaseAt)}.`); renderCosmeticsGrid(); return; }
+    if (av.soldOut) { alert(`"${itemName}" is sold out — the limited stock of ${av.stock} was fully claimed.`); renderCosmeticsGrid(); return; }
     if (price > 0 && ecoBalance !== null && ecoBalance < price) {
       alert(`Not enough Soul Coins. You need ${price} but have ${(ecoBalance || 0)}. Open the Coins tab to top up.`);
       showCoinsPage();
@@ -3397,6 +3454,10 @@ footer{
         const recRef = db.ref('cosmetics_purchases').push();
         await recRef.set({ accountKey: eco.key, accountType: eco.type, username: eco.user.name, itemId, itemName, price, at: Date.now() });
       } catch (e) {}
+      // Limited stock: decrement the shared counter so the drop can actually sell out.
+      if (av.stock !== null) {
+        try { await db.ref('capes/catalog/' + itemId + '/stock').transaction(v => Math.max(0, (typeof v === 'number' ? v : 1) - 1)); } catch (e) {}
+      }
       if (window.soulToast && typeof window.soulToast.show === 'function') window.soulToast.show('success', 'Cosmetic Purchased', `"${itemName}" is now permanently owned by ${eco.key}.`);
       else alert(`"${itemName}" purchased! Permanently owned by ${eco.key}.`);
     } catch (err) {
@@ -5581,10 +5642,22 @@ footer{
     el.name.textContent = nm;
     el.cid.textContent = id;
     el.cat.textContent = (item && item.category) || 'CAPE';
-    el.price.innerHTML = isFree ? '<span style="color:#22c55e;">FREE</span>' : (price > 0 ? '$' + price.toFixed(2) + '<small>USD</small>' : '');
+    el.price.innerHTML = isFree ? '<span style="color:#22c55e;">FREE</span>' : (price > 0 ? '$' + price.toFixed(2) + '<small>USD</small>' : '') + avail3dHtml;
     const isShieldCat = (typeof soulIsShieldItem === 'function' && soulIsShieldItem(item));
     if (isShieldCat) { el.badge.style.display = ''; el.badge.textContent = 'SHIELD • OFF-HAND'; }
     else { el.badge.style.display = (item && item.animated) ? '' : 'none'; el.badge.textContent = 'ANIMATED • LIVE'; }
+    // Scheduled drop / limited stock notice + purchase gate
+    const av3d = (typeof window.cosAvailState === 'function')
+      ? window.cosAvailState(item)
+      : { releaseAt: null, stock: null, scheduled: false, soldOut: false, show: true };
+    const avail3dHtml = !av3d.show ? '' : (
+      (av3d.scheduled
+        ? `<div class="cos-release-badge" style="margin-top:6px;">DROPS IN <span class="cos-release-timer" data-release-at="${av3d.releaseAt}">${(typeof window.cosCountdownText === 'function' ? window.cosCountdownText(av3d.releaseAt) : '--')}</span></div>`
+        : '<div class="cos-release-badge cos-avail-now" style="margin-top:6px;">AVAILABLE FOR PURCHASE</div>')
+      + (av3d.stock !== null
+        ? `<div class="cos-stock-badge" style="margin-top:6px;">${av3d.soldOut ? 'SOLD OUT' : ('ONLY ' + av3d.stock + ' LEFT')}</div>`
+        : '')
+    );
     try {
       const note = el.modal.querySelector('.soul-3d-note');
       if (note) note.innerHTML = isShieldCat
@@ -5598,6 +5671,9 @@ footer{
       }
     } catch (_) {}
     el.buy.onclick = () => {
+      const avNow = (typeof window.cosAvailState === 'function') ? window.cosAvailState(soulModalItem) : { scheduled: false, soldOut: false, releaseAt: null };
+      if (avNow.scheduled) { alert(`"${nm}" is not available for purchase yet — it drops in ${(typeof window.cosCountdownText === 'function' ? window.cosCountdownText(avNow.releaseAt) : 'a while')}.`); return; }
+      if (avNow.soldOut) { alert(`"${nm}" is sold out.`); return; }
       try { requestCosmeticPurchase(id, String(nm).replace(/'/g, ''), price || 0); } catch (e) { alert('Login first to request a purchase.'); }
     };
     el.modal.classList.add('open');
