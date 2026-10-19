@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google-adsense-account" content="ca-pub-1586292562717178">
 <title>Soul Client - The Best Minecraft Client</title>
-<meta name="description" content="Soul Client is the best free Minecraft launcher and client for Java Edition. Download Soul Client for Fabric, Forge, and Vanilla Minecraft with HUD editor, mod browser, skin editor, Java auto-management, and FPS boosts. Official site at soullauncher.vercel.app.">
+<meta name="description" content="Soul Client is the best free Minecraft launcher and client for Java Edition. Download Soul Client for Fabric, Forge, and Vanilla Minecraft with HUD editor, mod browser, skin editor, Java auto-management, and FPS boosts. Official site at soulclientmc.vercel.app.">
 <meta name="keywords" content="Soul Client, Soul Client Minecraft, Soul Client download, Soul Client launcher, Minecraft client, Minecraft launcher, Minecraft mods, Fabric client, Forge client, Vanilla Minecraft client, Minecraft HUD editor, Minecraft utility mod, Minecraft PvP client, Minecraft FPS boost, Minecraft mod menu, Minecraft skin editor, Minecraft instance manager, Minecraft Java Edition client, free Minecraft client, best Minecraft launcher, soullauncher, Minecraft download, Minecraft 1.8 client, Minecraft 1.19 client, Minecraft 1.20 client, Minecraft mod loader, Minecraft resource pack, Minecraft replay mod, Minecraft auto GG, Minecraft Hypixel client">
 <meta name="robots" content="index, follow">
-<link rel="canonical" href="https://soullauncher.vercel.app/">
+<link rel="canonical" href="https://soulclientmc.vercel.app/">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-auth-compat.js"></script>
@@ -51,7 +51,7 @@
   "name": "Soul Client",
   "applicationCategory": "GameApplication",
   "operatingSystem": "Windows",
-  "url": "https://soullauncher.vercel.app/",
+  "url": "https://soulclientmc.vercel.app/",
   "description": "The fastest, modern Minecraft client built for performance, customization, and the best gameplay experience.",
   "offers": {
     "@type": "Offer",
@@ -63,13 +63,13 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="Soul Client - The Best Minecraft Client">
 <meta property="og:description" content="The fastest, modern Minecraft client built for performance, customization, and the best gameplay experience.">
-<meta property="og:url" content="https://soullauncher.vercel.app/">
-<meta property="og:image" content="https://soullauncher.vercel.app/banner.png">
+<meta property="og:url" content="https://soulclientmc.vercel.app/">
+<meta property="og:image" content="https://soulclientmc.vercel.app/banner.png">
 <meta property="og:site_name" content="Soul Client">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Soul Client">
 <meta name="twitter:description" content="The fastest, modern Minecraft client built for performance, customization, and the best gameplay experience.">
-<meta name="twitter:image" content="https://soullauncher.vercel.app/banner.png">
+<meta name="twitter:image" content="https://soulclientmc.vercel.app/banner.png">
 <style>
 :root{
   --paper:#121113;
@@ -995,6 +995,13 @@ footer{
 .cos-view3d-btn:hover{background:var(--bolt);color:var(--ink);}
 .cos-card-actions{display:flex;gap:8px;}
 .cos-card-actions .cos-buy-btn,.cos-card-actions .cos-view3d-btn{flex:1;}
+.cos-share-btn{
+  background:transparent;color:var(--bolt);border:2px solid var(--bolt);
+  padding:10px 12px;font-family:'JetBrains Mono',monospace;font-weight:700;
+  font-size:12px;text-transform:uppercase;cursor:pointer;text-align:center;
+  transition:background .12s ease,color .12s ease;flex:0 0 auto;
+}
+.cos-share-btn:hover{background:var(--bolt);color:var(--ink);}
 .soul-3d-toolbar{
   display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
   border:2px dashed var(--ink);background:var(--paper);padding:10px 14px;margin-bottom:14px;
@@ -1586,7 +1593,7 @@ footer{
     <ol style="text-align:left;font-size:13px;line-height:1.7;color:var(--ink-soft);margin:0 0 14px;padding-left:20px;">
       <li>Open <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener" style="color:var(--bolt);">portal.azure.com → App registrations</a> and click <b>New registration</b>.</li>
       <li>Name it <b>Soul Web</b>. Under account types pick <b>Personal Microsoft accounts only</b>.</li>
-      <li>Redirect URI: choose platform <b>Single-page application (SPA)</b> and add <b id="ms-setup-redirect">https://soullauncher.vercel.app/</b>.</li>
+      <li>Redirect URI: choose platform <b>Single-page application (SPA)</b> and add <b id="ms-setup-redirect">https://soulclientmc.vercel.app/</b>.</li>
       <li>Click Register, then copy the <b>Application (client) ID</b> below.</li>
     </ol>
     <input type="text" class="coin-code-input" id="ms-client-id-input" placeholder="Paste your Application (client) ID here" style="width:100%;">
@@ -2048,6 +2055,7 @@ footer{
         </div>
         <div class="soul-3d-actions">
           <button class="cos-view3d-btn" onclick="closeSoulCape3D()">Close</button>
+          <button class="cos-share-btn" id="soul-3d-share" title="Copy a share link to this cosmetic">Share</button>
           <button class="cos-buy-btn" id="soul-3d-buy">Request Purchase</button>
         </div>
         <div class="soul-3d-note">Drag to orbit • scroll to zoom • animated capes re-render <b>every frame</b> exactly like the Soul Client (frame tick, no frozen first-frame).</div>
@@ -2831,6 +2839,7 @@ footer{
           ${priceTag}
           <div class="cos-card-actions">
             <button class="cos-view3d-btn" onclick="event.stopPropagation();openSoulCape3D('${safeId}')">View 3D</button>
+            <button class="cos-share-btn" onclick="event.stopPropagation();shareCosmetic('${safeId}','${safeName}')" title="Copy a share link to this cosmetic">Share</button>
             ${btnHtml}
           </div>
         </div>
@@ -3673,7 +3682,7 @@ footer{
   let _msAuthWindow = null;
   window.startMsOauthLogin = async () => {
     if (location.protocol === 'file:') {
-      return alert('Real Minecraft login must run from the live site (Vercel) or a local web server - not by double-clicking index.html. Open https://soullauncher.vercel.app or http://127.0.0.1:<port>/ and register that exact address as a redirect URI.');
+      return alert('Real Minecraft login must run from the live site (Vercel) or a local web server - not by double-clicking index.html. Open https://soulclientmc.vercel.app or http://127.0.0.1:<port>/ and register that exact address as a redirect URI.');
     }
     if (!msClientId()) {
       document.getElementById('ms-setup-redirect').textContent = location.origin + location.pathname;
@@ -3705,7 +3714,7 @@ footer{
   };
 
   // The exact address where this page runs. Register this SAME string as the
-  // SPA redirect URI in Azure (https://soullauncher.vercel.app/ in production,
+  // SPA redirect URI in Azure (https://soulclientmc.vercel.app/ in production,
   // or e.g. http://127.0.0.1:8791/Soul-Web/index.html for local testing).
   function msRedirectUri() {
     return location.origin + location.pathname;
@@ -5545,7 +5554,8 @@ footer{
       price: document.getElementById('soul-3d-price'),
       badge: document.getElementById('soul-3d-anim-badge'),
       skin: document.getElementById('soul-3d-skin'),
-      buy: document.getElementById('soul-3d-buy')
+      buy: document.getElementById('soul-3d-buy'),
+      share: document.getElementById('soul-3d-share')
     };
   }
   function soulCurrentSkinName() {
@@ -5639,14 +5649,7 @@ footer{
     const nm = (item && item.name) || id;
     const price = item ? Number(item.price) : 0;
     const isFree = item && item.free === true;
-    el.name.textContent = nm;
-    el.cid.textContent = id;
-    el.cat.textContent = (item && item.category) || 'CAPE';
-    el.price.innerHTML = isFree ? '<span style="color:#22c55e;">FREE</span>' : (price > 0 ? '$' + price.toFixed(2) + '<small>USD</small>' : '') + avail3dHtml;
-    const isShieldCat = (typeof soulIsShieldItem === 'function' && soulIsShieldItem(item));
-    if (isShieldCat) { el.badge.style.display = ''; el.badge.textContent = 'SHIELD • OFF-HAND'; }
-    else { el.badge.style.display = (item && item.animated) ? '' : 'none'; el.badge.textContent = 'ANIMATED • LIVE'; }
-    // Scheduled drop / limited stock notice + purchase gate
+    // Scheduled drop / limited stock notice + purchase gate (MUST precede the el.price innerHTML below)
     const av3d = (typeof window.cosAvailState === 'function')
       ? window.cosAvailState(item)
       : { releaseAt: null, stock: null, scheduled: false, soldOut: false, show: true };
@@ -5658,6 +5661,13 @@ footer{
         ? `<div class="cos-stock-badge" style="margin-top:6px;">${av3d.soldOut ? 'SOLD OUT' : ('ONLY ' + av3d.stock + ' LEFT')}</div>`
         : '')
     );
+    el.name.textContent = nm;
+    el.cid.textContent = id;
+    el.cat.textContent = (item && item.category) || 'CAPE';
+    el.price.innerHTML = isFree ? '<span style="color:#22c55e;">FREE</span>' : (price > 0 ? '$' + price.toFixed(2) + '<small>USD</small>' : '') + avail3dHtml;
+    const isShieldCat = (typeof soulIsShieldItem === 'function' && soulIsShieldItem(item));
+    if (isShieldCat) { el.badge.style.display = ''; el.badge.textContent = 'SHIELD • OFF-HAND'; }
+    else { el.badge.style.display = (item && item.animated) ? '' : 'none'; el.badge.textContent = 'ANIMATED • LIVE'; }
     try {
       const note = el.modal.querySelector('.soul-3d-note');
       if (note) note.innerHTML = isShieldCat
@@ -5676,6 +5686,7 @@ footer{
       if (avNow.soldOut) { alert(`"${nm}" is sold out.`); return; }
       try { requestCosmeticPurchase(id, String(nm).replace(/'/g, ''), price || 0); } catch (e) { alert('Login first to request a purchase.'); }
     };
+    try { el.share.onclick = () => window.shareCosmetic(soulModalId, nm); } catch (_) {}
     el.modal.classList.add('open');
     document.body.style.overflow = 'hidden';
     el.loading.style.display = 'flex';
@@ -5747,6 +5758,28 @@ footer{
     try { if (soulModalTicker) soulModalTicker.stop(); } catch (_) {}
     try { if (soulModalViewer && typeof soulClearShield === 'function') soulClearShield(soulModalViewer); } catch (_) {}
     try { if (soulModalViewer) soulModalViewer.autoRotate = false; } catch (_) {}
+  };
+  // ---- share a cosmetic: copy a deep link that opens the store page with this cape LIVE in 3D ----
+  window.shareCosmetic = async function (id, name) {
+    const url = 'https://soulclientmc.vercel.app/#cosmetics/' + encodeURIComponent(id);
+    let ok = false;
+    try { if (navigator.clipboard) { await navigator.clipboard.writeText(url); ok = true; } } catch (_) {}
+    if (!ok) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand('copy');
+        ta.remove();
+      } catch (_) {}
+    }
+    try {
+      if (ok && window.soulToast && typeof window.soulToast.show === 'function') window.soulToast.show('success', 'LINK COPIED', (name || id) + ' — share link copied. Paste it anywhere!');
+      else if (ok) alert('Share link copied:\n' + url);
+      else alert('Copy this share link:\n' + url);
+    } catch (_) {}
   };
   // ---- mini card viewers ----
   const soulMinis = new Map();
@@ -6144,6 +6177,24 @@ footer{
     if (h === 'posts') showPostsPage();
     else if (h === 'jobs') showJobsPage();
     else if (h === 'cosmetics') showCosmeticsPage();
+    else if (h.indexOf('cosmetics/') === 0) {
+      // Shared link (#cosmetics/<capeId>): open the store, wait for the Firebase
+      // catalog, then auto-open that cape's LIVE 3D view for the visitor.
+      const sub = decodeURIComponent(h.slice(10));
+      showCosmeticsPage();
+      if (sub) {
+        setTimeout(() => {
+          let tries = 14;
+          const open = () => {
+            let card = null;
+            try { card = document.querySelector('[data-cape-id="' + sub.replace(/["\\]/g, '') + '"]'); } catch (_) {}
+            if (card) { try { card.scrollIntoView({ block: 'center' }); } catch (_) {} window.openSoulCape3D(sub); }
+            else if (--tries > 0) setTimeout(open, 500);
+          };
+          open();
+        }, 300);
+      }
+    }
     else if (h === 'coins') showCoinsPage();
     else if (h === 'tickets') showTicketsPage();
     else if (h === 'redeem') showRedeemPage();
